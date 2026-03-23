@@ -1,0 +1,177 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+// --- Mocks (hoisted) ---------------------------------------------------
+
+const mockSelectChatModels = vi.hoisted(() => vi.fn());
+const mockExecuteCommand = vi.hoisted(() => vi.fn());
+
+vi.mock('vscode', () => ({
+	lm: { selectChatModels: mockSelectChatModels },
+	commands: { executeCommand: mockExecuteCommand },
+	l10n: {
+		t: (message: string, ...args: string[]) =>
+			message.replace(/\{(\d+)\}/g, (_, i) => args[Number(i)]),
+	},
+	MarkdownString: class MarkdownString {
+		constructor(public value: string) { }
+	},
+}));
+
+import { switchToFallbackModel } from '../modelSwitching';
+
+// --- Helpers ------------------------------------------------------------
+
+function createMockRequest(modelId: string) {
+	return {
+		prompt: 'test prompt',
+		model: {
+			id: modelId,
+			vendor: 'copilot',
+			family: 'gpt-4o',
+			name: 'GPT-4o',
+			version: '',
+			maxInputTokens: 128_000,
+			countTokens: vi.fn(),
+			sendRequest: vi.fn(),
+		},
+	} as any;
+}
+
+function createMockStream() {
+	return {
+		warning: vi.fn(),
+		markdown: vi.fn(),
+		progress: vi.fn(),
+	} as any;
+}
+
+function createChatModel(overrides: { id: string; family: string; name?: string }) {
+	return {
+		id: overrides.id,
+		vendor: 'copilot',
+		family: overrides.family,
+		name: overrides.name ?? overrides.id,
+		version: '',
+		maxInputTokens: 200_000,
+		countTokens: vi.fn(),
+		sendRequest: vi.fn(),
+	};
+}
+
+// --- Tests --------------------------------------------------------------
+
+describe('switchToFallbackModel', () => {
+	let mockStream: ReturnType<typeof createMockStream>;
+
+	beforeEach(() => {
+		mockStream = createMockStream();
+		mockSelectChatModels.mockReset();
+		mockExecuteCommand.mockReset();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	test('returns updated request when fallback model is found', async () => {
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' });
+		mockSelectChatModels.mockResolvedValue([claudeOpus]);
+
+		const request = createMockRequest('gpt-4o');
+		const result = await switchToFallbackModel(request, mockStream);
+
+		expect(result.model.id).toBe('claude-opus-id');
+		expect(mockExecuteCommand).toHaveBeenCalledWith('workbench.action.chat.changeModel', {
+			vendor: 'copilot',
+			id: 'claude-opus-id',
+			family: 'claude-opus-4-6',
+		});
+		expect(mockStream.warning).toHaveBeenCalledOnce();
+	});
+
+	test('returns original request when no fallback model available', async () => {
+		const someOtherModel = createChatModel({ id: 'gpt-4o', family: 'gpt-4o' });
+		mockSelectChatModels.mockResolvedValue([someOtherModel]);
+
+		const request = createMockRequest('gpt-4o');
+		const result = await switchToFallbackModel(request, mockStream);
+
+		expect(result.model.id).toBe('gpt-4o');
+		expect(mockExecuteCommand).not.toHaveBeenCalled();
+		expect(mockStream.warning).not.toHaveBeenCalled();
+	});
+
+	test('returns original request when already on fallback model', async () => {
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6' });
+		mockSelectChatModels.mockResolvedValue([claudeOpus]);
+
+		const request = createMockRequest('claude-opus-id');
+		const result = await switchToFallbackModel(request, mockStream);
+
+		expect(result.model.id).toBe('claude-opus-id');
+		expect(mockExecuteCommand).not.toHaveBeenCalled();
+		expect(mockStream.warning).not.toHaveBeenCalled();
+	});
+
+	test('returns original request when selectChatModels returns empty array', async () => {
+		mockSelectChatModels.mockResolvedValue([]);
+
+		const request = createMockRequest('gpt-4o');
+		const result = await switchToFallbackModel(request, mockStream);
+
+		expect(result.model.id).toBe('gpt-4o');
+		expect(mockExecuteCommand).not.toHaveBeenCalled();
+		expect(mockStream.warning).not.toHaveBeenCalled();
+	});
+
+	test('warning message uses model name when available', async () => {
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' });
+		mockSelectChatModels.mockResolvedValue([claudeOpus]);
+
+		const request = createMockRequest('gpt-4o');
+		await switchToFallbackModel(request, mockStream);
+
+		const warningArg = mockStream.warning.mock.calls[0][0];
+		expect(warningArg.value).toContain('Claude Opus 4.6');
+	});
+
+	test('warning message falls back to default name when model name is undefined', async () => {
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6' });
+		(claudeOpus as any).name = undefined;
+		mockSelectChatModels.mockResolvedValue([claudeOpus]);
+
+		const request = createMockRequest('gpt-4o');
+		await switchToFallbackModel(request, mockStream);
+
+		const warningArg = mockStream.warning.mock.calls[0][0];
+		expect(warningArg.value).toContain('Claude Opus 4');
+	});
+
+	test('selects first claude-opus-4 family model from multiple results', async () => {
+		const otherModel = createChatModel({ id: 'gpt-4o', family: 'gpt-4o' });
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6' });
+		const anotherOpus = createChatModel({ id: 'claude-opus-id-2', family: 'claude-opus-4-7' });
+		mockSelectChatModels.mockResolvedValue([otherModel, claudeOpus, anotherOpus]);
+
+		const request = createMockRequest('gpt-4o');
+		const result = await switchToFallbackModel(request, mockStream);
+
+		// Should pick the first match
+		expect(result.model.id).toBe('claude-opus-id');
+	});
+
+	test('preserves non-model fields of the request', async () => {
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6' });
+		mockSelectChatModels.mockResolvedValue([claudeOpus]);
+
+		const request = createMockRequest('gpt-4o');
+		const result = await switchToFallbackModel(request, mockStream);
+
+		expect(result.prompt).toBe('test prompt');
+	});
+});

@@ -23,6 +23,7 @@ import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
+import { switchToFallbackModel } from './modelSwitching';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 
@@ -244,6 +245,19 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				}
 			}
 
+			// Auto-retry with fallback model on first failure for retriable errors
+			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel
+				&& result.errorDetails
+				&& !result.errorDetails.responseIsFiltered) {
+				const previousModelId = request.model?.id;
+				const switchedRequest = await switchToFallbackModel(request, stream);
+				if (switchedRequest.model?.id !== previousModelId) {
+					request = switchedRequest;
+					const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
+					result = await retryHandler.getResult();
+				}
+			}
+
 			return result;
 		};
 	}
@@ -294,6 +308,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		stream.warning(new vscode.MarkdownString(vscode.l10n.t('You were rate-limited on the selected model. Switching to Auto and retrying your request.')));
 		return request;
 	}
+
 }
 
 type IntentOrGetter = Intent | ((request: vscode.ChatRequest) => Intent);

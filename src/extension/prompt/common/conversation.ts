@@ -401,6 +401,7 @@ export interface IResultMetadata {
 	promptTokens?: number;
 	outputTokens?: number;
 	shouldAutoSwitchToAuto?: boolean;
+	shouldAutoRetryWithFallbackModel?: boolean;
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */

@@ -71,6 +71,11 @@ export interface IDefaultIntentRequestHandlerOptions {
 	hideRateLimitTimeEstimate?: boolean;
 }
 
+function isUnsupportedModelParameterError(fetchResult: { reason: string }): boolean {
+	return fetchResult.reason.includes('"code":"invalid_request_body"')
+		|| fetchResult.reason.includes('Unsupported value');
+}
+
 /*
 * Handles a single chat-request via an intent-invocation.
 */
@@ -527,6 +532,9 @@ export class DefaultIntentRequestHandler {
 			case ChatFetchResponseType.Failed: {
 				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
+				if (isUnsupportedModelParameterError(fetchResult)) {
+					metadataFragment.shouldAutoRetryWithFallbackModel = true;
+				}
 				const chatResult = { errorDetails, metadata: metadataFragment };
 				this.turn.setResponse(TurnStatus.Error, { message: errorDetails.message, type: 'server' }, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
@@ -568,6 +576,9 @@ export class DefaultIntentRequestHandler {
 			case ChatFetchResponseType.Unknown: {
 				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
+				if (fetchResult.type === ChatFetchResponseType.Unknown && isUnsupportedModelParameterError(fetchResult)) {
+					metadataFragment.shouldAutoRetryWithFallbackModel = true;
+				}
 				const chatResult = { errorDetails, metadata: metadataFragment };
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;

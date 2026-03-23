@@ -8,11 +8,14 @@ import { Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import type { ChatLanguageModelToolReference, ChatPromptReference, ChatRequest, ExtendedChatResponsePart, LanguageModelChat } from 'vscode';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
+import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/common/commonTypes';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
+import { MockChatMLFetcher } from '../../../../platform/chat/test/common/mockChatMLFetcher';
 import { StaticChatMLFetcher } from '../../../../platform/chat/test/common/staticChatMLFetcher';
 import { MockEndpoint } from '../../../../platform/endpoint/test/node/mockEndpoint';
 import { IResponseDelta } from '../../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { FilterReason } from '../../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { SpyingTelemetryService } from '../../../../platform/telemetry/node/spyingTelemetryService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
@@ -28,7 +31,7 @@ import { ChatLocation, ChatResponseConfirmationPart, ChatResponseMarkdownPart, L
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
 import { ToolResultMetadata } from '../../../prompts/node/panel/toolCalling';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { Conversation, Turn } from '../../common/conversation';
+import { Conversation, ICopilotChatResultIn, Turn } from '../../common/conversation';
 import { IBuildPromptContext } from '../../common/intents';
 import { ToolCallRound } from '../../common/toolCallRound';
 import { ChatTelemetryBuilder } from '../chatParticipantTelemetry';
@@ -355,6 +358,135 @@ suite('defaultIntentRequestHandler', () => {
 		const last2 = response.at(-1);
 		expect(last2).toBeInstanceOf(ChatResponseMarkdownPart);
 		expect((last2 as ChatResponseMarkdownPart).value.value).toMatchInlineSnapshot(`"Let me know if there's anything else I can help with!"`);
+	});
+
+	suite('shouldAutoRetryWithFallbackModel', () => {
+		let mockFetcher: MockChatMLFetcher;
+
+		beforeEach(async () => {
+			// Dispose the accessor created by the parent beforeEach and recreate with MockChatMLFetcher
+			accessor.dispose();
+
+			const services = createExtensionUnitTestingServices();
+			telemetry = new SpyingTelemetryService();
+			mockFetcher = new MockChatMLFetcher();
+			services.define(ITelemetryService, telemetry);
+			services.define(IChatMLFetcher, mockFetcher);
+			services.define(IWorkspaceFileIndex, new SyncDescriptor(NullWorkspaceFileIndex));
+
+			accessor = services.createTestingAccessor();
+			endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
+			builtPrompts = [];
+			response = [];
+			promptResult = {
+				...nullRenderPromptResult(),
+				messages: [{ role: Raw.ChatRole.User, content: [toTextPart('hello world!')] }],
+			};
+			turnIdCounter = 0;
+			(ToolCallingLoop as any).NextToolCallId = 0;
+			(ToolCallRound as any).generateID = () => 'static-id';
+		});
+
+		const unsupportedValueReason = 'Request Failed: 400 {"error":{"message":"Unsupported value: \'xhigh\' is not supported","code":"invalid_request_body"}}';
+
+		const makeErrorResponse = (type: ChatFetchResponseType, reason?: string, extra?: Record<string, unknown>): ChatResponse => ({
+			type,
+			reason: reason ?? 'test error',
+			requestId: 'test-request-id',
+			serverRequestId: undefined,
+			...extra,
+		} as ChatResponse);
+
+		test('flag is set for Failed with unsupported value reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.Failed, unsupportedValueReason));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBe(true);
+		});
+
+		test('flag is set for NetworkError with unsupported value reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.NetworkError, unsupportedValueReason));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBe(true);
+		});
+
+		test('flag is set for BadRequest with unsupported value reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.BadRequest, unsupportedValueReason));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBe(true);
+		});
+
+		test('flag is set for Unknown with unsupported value reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.Unknown, unsupportedValueReason));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBe(true);
+		});
+
+		test('flag is not set for Failed with generic reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.Failed, 'Server error occurred'));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
+		});
+
+		test('flag is not set for Unknown with generic reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.Unknown, 'Something went wrong'));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
+		});
+
+		test('flag is set for Failed with invalid_request_body code in reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.Failed, 'Request Failed: 400 {"error":{"message":"some error","code":"invalid_request_body"}}'));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBe(true);
+		});
+
+		test('flag is set for Failed with Unsupported value in reason', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.Failed, 'Unsupported value for parameter'));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBe(true);
+		});
+
+		test('flag is not set for NotFound response type', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.NotFound, 'Model not found'));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
+		});
+
+		test('flag is not set for Filtered response type', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.Filtered, 'Content filtered', { category: FilterReason.Hate }));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
+		});
+
+		test('flag is not set for QuotaExceeded response type', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.QuotaExceeded, 'Quota exceeded', { retryAfter: new Date() }));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
+		});
+
+		test('flag is not set for RateLimited response type', async () => {
+			mockFetcher.setNextResponse(makeErrorResponse(ChatFetchResponseType.RateLimited, 'Rate limited', { retryAfter: undefined, rateLimitKey: 'test', isAuto: false }));
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
+		});
+
+		test('flag is not set for Success response type', async () => {
+			// MockChatMLFetcher defaults to Success
+			const handler = makeHandler();
+			const result = await handler.getResult();
+			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
+		});
 	});
 });
 
