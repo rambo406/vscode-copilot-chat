@@ -384,6 +384,7 @@
 	"github.copilot.config.inlineEdits.chatSessionContextProvider.enabled": "Enable chat session context provider for next edit suggestions.",
 	"github.copilot.config.codesearch.agent.enabled": "Enable code search capabilities in agent mode.",
 	"github.copilot.config.agent.temperature": "Temperature setting for agent mode requests.",
+	"github.copilot.config.chat.reasoningEffort": "Override the default reasoning effort level for the model's 'Thinking Effort' dropdown. Can be set to a string like `\"medium\"` (applies to all models) or an object like `{ \"default\": \"medium\", \"claude\": \"high\" }` to set per-family defaults. Valid effort levels: `low`, `medium`, `high`.",
 	"github.copilot.config.agent.omitFileAttachmentContents": "Omit summarized file contents from file attachments in agent mode, to encourage the agent to properly read and explore.",
 	"github.copilot.config.agent.largeToolResultsToDisk.enabled": "When enabled, large tool results are written to disk instead of being included directly in the context, helping manage context window usage.",
 	"github.copilot.config.agent.largeToolResultsToDisk.thresholdBytes": "The size threshold in bytes above which tool results are written to disk. Only applies when largeToolResultsToDisk.enabled is true.",

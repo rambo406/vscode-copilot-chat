@@ -11,7 +11,7 @@ import { CopilotToken } from '../../../platform/authentication/common/copilotTok
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -48,7 +48,54 @@ import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
  * Builds a configurationSchema for the model picker based on the endpoint's supported capabilities.
  * Models that support reasoning_effort get a "Thinking Effort" dropdown in the model picker UI.
  */
-function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchema?: vscode.LanguageModelConfigurationSchema } {
+/**
+ * Resolves the default reasoning effort for a model, considering user settings.
+ * @param settingValue The user's configured reasoning effort override (from IConfigurationService)
+ * @param family The model family (e.g., 'claude-3.5-sonnet', 'gpt-4o')
+ * @param effortLevels The model's supported effort levels
+ * @param hardcodedDefault The hardcoded default for this family
+ * @returns The resolved default effort level, or undefined if none is valid
+ */
+export function resolveReasoningEffortDefault(
+	settingValue: string | Record<string, string> | undefined,
+	family: string,
+	effortLevels: readonly string[],
+	hardcodedDefault: string | undefined,
+): string | undefined {
+	if (settingValue === undefined || settingValue === null) {
+		return hardcodedDefault;
+	}
+
+	// Normalize string shorthand to object form
+	const config: Record<string, string> = typeof settingValue === 'string'
+		? { default: settingValue }
+		: settingValue;
+
+	const normalizedFamily = family.toLowerCase();
+
+	// Look for a family-specific override: check each key as a prefix of the family
+	let familyEffort: string | undefined;
+	for (const [key, value] of Object.entries(config)) {
+		if (key === 'default') {
+			continue;
+		}
+		if (normalizedFamily.startsWith(key.toLowerCase())) {
+			familyEffort = value;
+			break;
+		}
+	}
+
+	// Use family-specific override if found, otherwise fall back to 'default' key
+	const effort = familyEffort ?? config['default'];
+
+	if (effort && effortLevels.includes(effort)) {
+		return effort;
+	}
+
+	return hardcodedDefault;
+}
+
+function buildConfigurationSchema(endpoint: IChatEndpoint, configurationService?: IConfigurationService): { configurationSchema?: vscode.LanguageModelConfigurationSchema } {
 	const effortLevels = endpoint.supportsReasoningEffort;
 	if (!effortLevels || effortLevels.length === 0) {
 		return {};
@@ -65,8 +112,9 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 		return {};
 	}
 
-	const preferred = family.startsWith('claude') ? 'high' : 'medium';
-	const defaultEffort = effortLevels.includes(preferred) ? preferred : undefined;
+	const hardcodedDefault = family.startsWith('claude') ? 'high' : 'medium';
+	const settingValue = configurationService?.get(ConfigKey.Advanced.ReasoningEffortOverride);
+	const defaultEffort = resolveReasoningEffortDefault(settingValue, endpoint.family, effortLevels, effortLevels.includes(hardcodedDefault) ? hardcodedDefault : undefined);
 
 	return {
 		configurationSchema: {
@@ -179,6 +227,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
 		@IAutomodeService private readonly _automodeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -341,7 +390,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
 				},
-				...buildConfigurationSchema(endpoint),
+				...buildConfigurationSchema(endpoint, this._configurationService),
 			};
 
 			models.push(model);

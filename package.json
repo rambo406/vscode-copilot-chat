@@ -4282,6 +4282,32 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.reasoningEffort": {
+						"oneOf": [
+							{
+								"type": "string",
+								"enum": ["low", "medium", "high"]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"default": {
+										"type": "string",
+										"enum": ["low", "medium", "high"],
+										"description": "Default reasoning effort for all model families"
+									}
+								},
+								"additionalProperties": {
+									"type": "string",
+									"enum": ["low", "medium", "high"]
+								}
+							}
+						],
+						"markdownDescription": "%github.copilot.config.chat.reasoningEffort%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.agent.omitFileAttachmentContents": {
 						"type": "boolean",
 						"default": false,

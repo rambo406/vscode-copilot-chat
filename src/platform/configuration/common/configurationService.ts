@@ -603,6 +603,7 @@ export namespace ConfigKey {
 		export const EditRecordingEnabled = defineAndMigrateSetting('chat.advanced.editRecording.enabled', 'chat.editRecording.enabled', false);
 		export const CodeSearchAgentEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.codesearch.agent.enabled', 'chat.codesearch.agent.enabled', true);
 		export const AgentTemperature = defineAndMigrateSetting<number | undefined>('chat.advanced.agent.temperature', 'chat.agent.temperature', undefined);
+		export const ReasoningEffortOverride = defineSetting<string | Record<string, string> | undefined>('chat.reasoningEffort', ConfigType.Simple, undefined);
 		export const EnableUserPreferences = defineAndMigrateSetting<boolean>('chat.advanced.enableUserPreferences', 'chat.enableUserPreferences', false);
 		export const SummarizeAgentConversationHistoryThreshold = defineAndMigrateSetting<number | undefined>('chat.advanced.summarizeAgentConversationHistoryThreshold', 'chat.summarizeAgentConversationHistoryThreshold', undefined);
 		export const AgentHistorySummarizationMode = defineAndMigrateSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', 'chat.agentHistorySummarizationMode', undefined);
