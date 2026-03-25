@@ -401,6 +401,8 @@ export interface IResultMetadata {
 	promptTokens?: number;
 	outputTokens?: number;
 	shouldAutoSwitchToAuto?: boolean;
+	shouldAutoRetryWithFallbackAccount?: boolean;
+	attemptedFallbackAccountIds?: readonly string[];
 	/** When set, the request should retry by continuing with the configured fallback model (or a downgraded effort if fallback selection is disabled). */
 	shouldAutoRetryWithFallbackModel?: boolean;
 }

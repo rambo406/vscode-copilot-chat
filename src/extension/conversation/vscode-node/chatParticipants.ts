@@ -5,6 +5,7 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { IChatFallbackAccountResolverService } from '../../../platform/authentication/common/chatFallbackAccountResolver';
 import { IChatAgentService, defaultAgentName, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
@@ -24,6 +25,7 @@ import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
+import { retryWithFallbackAccount } from './fallbackAccountRetry';
 import { switchToFallbackModel } from './modelSwitching';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
@@ -60,6 +62,7 @@ class ChatAgents implements IDisposable {
 
 	constructor(
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IChatFallbackAccountResolverService private readonly chatFallbackAccountResolverService: IChatFallbackAccountResolverService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IUserFeedbackService private readonly userFeedbackService: IUserFeedbackService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
@@ -240,6 +243,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				request = this.createContinuationRetryRequest(retryRequest);
 				handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, { telemetryMessageId, seedConversation: retrySeedConversation });
 				result = await handler.getResult();
+				return { request, result };
 			};
 
 			// Auto-retry with Auto model when the setting is enabled and the handler signals it
@@ -252,6 +256,17 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 					result = await handler.getResult();
 				}
 			}
+
+			const fallbackAccountRetryResult = await retryWithFallbackAccount({
+				authenticationService: this.authenticationService,
+				resolverService: this.chatFallbackAccountResolverService,
+				request,
+				result,
+				stream,
+				retryAsContinuation,
+			});
+			request = fallbackAccountRetryResult.request;
+			result = fallbackAccountRetryResult.result as typeof result;
 
 			// Auto-retry with a fallback model when the model rejects the current reasoning effort level
 			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel) {

@@ -6,7 +6,11 @@
 import { ExtensionContext, ExtensionMode, l10n } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { AuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgradeService';
+import { IChatFallbackAccountResolverService } from '../../../platform/authentication/common/chatFallbackAccountResolver';
 import { CopilotTokenStore, ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
+import { IChatFallbackAccountRegistryService } from '../../../platform/authentication/common/fallbackAccountRegistry';
+import { ChatFallbackAccountResolverService } from '../../../platform/authentication/vscode-node/chatFallbackAccountResolverService';
+import { ChatFallbackAccountRegistryService } from '../../../platform/authentication/vscode-node/fallbackAccountRegistryService';
 import { BlockedExtensionService, IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { ChatQuotaService } from '../../../platform/chat/common/chatQuotaServiceImpl';
@@ -167,6 +171,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISnippyService, new SyncDescriptor(SnippyService));
 	builder.define(IInteractiveSessionService, new InteractiveSessionServiceImpl());
 	builder.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
+	builder.define(IChatFallbackAccountResolverService, new SyncDescriptor(ChatFallbackAccountResolverService));
+	builder.define(IChatFallbackAccountRegistryService, new SyncDescriptor(ChatFallbackAccountRegistryService));
 	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	builder.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	builder.define(IToolEmbeddingsComputer, new SyncDescriptor(ToolEmbeddingsComputer));

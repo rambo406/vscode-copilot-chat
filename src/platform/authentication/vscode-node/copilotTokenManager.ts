@@ -13,10 +13,10 @@ import { BaseOctoKitService } from '../../github/common/githubService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { IChatFallbackAccountResolverService } from '../common/chatFallbackAccountResolver';
 import { CopilotToken, ExtendedTokenInfo, TokenErrorNotificationId, TokenInfoOrError } from '../common/copilotToken';
 import { nowSeconds } from '../common/copilotTokenManager';
 import { BaseCopilotTokenManager } from '../node/copilotTokenManager';
-import { getAnyAuthSession } from './session';
 
 //Flag if we've shown message about broken oauth token.
 let shown401Message = false;
@@ -39,6 +39,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
 		@IEnvService envService: IEnvService,
+		@IChatFallbackAccountResolverService private readonly _chatFallbackAccountResolverService: IChatFallbackAccountResolverService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService
 	) {
 		super(new BaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
@@ -71,7 +72,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 
 		const allowNoAuthAccess = this.configurationService.getNonExtensionConfig<boolean>('chat.allowAnonymousAccess');
-		const session = await getAnyAuthSession(this.configurationService, { silent: true });
+		const session = await this._chatFallbackAccountResolverService.getCurrentChatSession();
 		if (!session && !allowNoAuthAccess) {
 			this._logService.warn('GitHub login failed');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.github_login_failed');

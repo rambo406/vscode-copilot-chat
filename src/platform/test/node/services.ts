@@ -14,11 +14,15 @@ import { ServiceCollection } from '../../../util/vs/platform/instantiation/commo
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
 import { AuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgradeService';
+import { IChatFallbackAccountResolverService } from '../../authentication/common/chatFallbackAccountResolver';
 import { ICopilotTokenManager } from '../../authentication/common/copilotTokenManager';
 import { CopilotTokenStore, ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
+import { IChatFallbackAccountRegistryService } from '../../authentication/common/fallbackAccountRegistry';
 import { StaticGitHubAuthenticationService } from '../../authentication/common/staticGitHubAuthenticationService';
 import { createStaticGitHubTokenProvider } from '../../authentication/node/copilotTokenManager';
 import { SimulationTestCopilotTokenManager } from '../../authentication/test/node/simulationTestCopilotTokenManager';
+import { ChatFallbackAccountResolverService } from '../../authentication/vscode-node/chatFallbackAccountResolverService';
+import { ChatFallbackAccountRegistryService } from '../../authentication/vscode-node/fallbackAccountRegistryService';
 import { IChatAgentService } from '../../chat/common/chatAgents';
 import { IChatQuotaService } from '../../chat/common/chatQuotaService';
 import { ChatQuotaService } from '../../chat/common/chatQuotaServiceImpl';
@@ -204,6 +208,8 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(ICopilotTokenManager, new SyncDescriptor(SimulationTestCopilotTokenManager));
 	testingServiceCollection.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
 	testingServiceCollection.define(IHeaderContributors, new SyncDescriptor(HeaderContributors));
+	testingServiceCollection.define(IChatFallbackAccountResolverService, new SyncDescriptor(ChatFallbackAccountResolverService));
+	testingServiceCollection.define(IChatFallbackAccountRegistryService, new SyncDescriptor(ChatFallbackAccountRegistryService));
 
 	testingServiceCollection.define(IConversationOptions, new SyncDescriptor(class implements IConversationOptions {
 		_serviceBrand: undefined;

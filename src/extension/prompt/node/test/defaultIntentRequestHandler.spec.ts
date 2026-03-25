@@ -488,6 +488,7 @@ suite('defaultIntentRequestHandler', () => {
 			expect((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel).toBeUndefined();
 		});
 	});
+
 });
 
 

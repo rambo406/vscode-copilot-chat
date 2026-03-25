@@ -867,6 +867,7 @@ export namespace ConfigKey {
 	export const selectedCompletionsModel = defineSetting<string>('selectedCompletionModel', ConfigType.Simple, '');
 
 	export const RateLimitAutoSwitchToAuto = defineSetting<boolean>('chat.rateLimitAutoSwitchToAuto', ConfigType.Simple, false, vBoolean());
+	export const RateLimitAutoRetryWithFallbackAccount = defineSetting<boolean>('chat.rateLimitAutoRetryWithFallbackAccount', ConfigType.Simple, false, vBoolean());
 
 	/** Use the Messages API instead of Chat Completions when supported */
 	export const UseAnthropicMessagesApi = defineSetting<boolean | undefined>('chat.anthropic.useMessagesApi', ConfigType.ExperimentBased, true);

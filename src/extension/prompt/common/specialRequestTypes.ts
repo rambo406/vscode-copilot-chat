@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import type { AuthenticationSessionAccountInformation } from 'vscode';
 import { ChatRequest } from '../../../vscodeTypes';
 
 export interface IToolCallIterationIncrease {
@@ -38,3 +39,15 @@ function isSwitchToAutoOnRateLimitConfirmation(c: unknown): c is ISwitchToAutoOn
 }
 export const getSwitchToAutoOnRateLimitConfirmation = (request: ChatRequest) => request.acceptedConfirmationData?.find(isSwitchToAutoOnRateLimitConfirmation);
 export const isSwitchToAutoOnRateLimit = (request: ChatRequest) => !!(request.acceptedConfirmationData?.some(isSwitchToAutoOnRateLimitConfirmation));
+
+export interface IFallbackAccountRetryContext {
+	copilotFallbackAccountRetry: true;
+	attemptedAccountIds: readonly string[];
+	originalActiveAccount?: AuthenticationSessionAccountInformation;
+}
+
+function isFallbackAccountRetryContext(c: unknown): c is IFallbackAccountRetryContext {
+	return !!(c && (c as IFallbackAccountRetryContext).copilotFallbackAccountRetry === true && Array.isArray((c as IFallbackAccountRetryContext).attemptedAccountIds));
+}
+
+export const getFallbackAccountRetryContext = (request: ChatRequest) => request.acceptedConfirmationData?.find(isFallbackAccountRetryContext);

@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.42.3",
+	"version": "0.42.4",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -2158,6 +2158,26 @@
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
 			},
 			{
+				"command": "github.copilot.chat.fallbackAccounts.manage",
+				"title": "%github.copilot.command.manageFallbackAccountsForChatRetry%",
+				"category": "Copilot Chat"
+			},
+			{
+				"command": "github.copilot.chat.fallbackAccounts.add",
+				"title": "%github.copilot.command.addFallbackAccountForChatRetry%",
+				"category": "Copilot Chat"
+			},
+			{
+				"command": "github.copilot.chat.fallbackAccounts.reorder",
+				"title": "%github.copilot.command.reorderFallbackAccountsForChatRetry%",
+				"category": "Copilot Chat"
+			},
+			{
+				"command": "github.copilot.chat.fallbackAccounts.remove",
+				"title": "%github.copilot.command.removeFallbackAccountForChatRetry%",
+				"category": "Copilot Chat"
+			},
+			{
 				"command": "copilot.claude.agents",
 				"title": "Manage Agents",
 				"category": "Claude Agent"
@@ -3047,6 +3067,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.rateLimitAutoSwitchToAuto%",
+						"tags": [
+							"onExp"
+						]
+					},
+					"github.copilot.chat.rateLimitAutoRetryWithFallbackAccount": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.rateLimitAutoRetryWithFallbackAccount%",
 						"tags": [
 							"onExp"
 						]

@@ -69,17 +69,17 @@ export function getAnyAuthSession(configurationService: IConfigurationService, o
 		async () => {
 			// Ask for aligned scopes first, since that's what we want to use going forward.
 			if (configurationService.getConfig(ConfigKey.Shared.AuthPermissions) !== AuthPermissionMode.Minimal) {
-				const permissive = await authentication.getSession(providerId, GITHUB_SCOPE_ALIGNED, { silent: true });
+				const permissive = await authentication.getSession(providerId, GITHUB_SCOPE_ALIGNED, { silent: true, account: options?.account });
 				if (permissive) {
 					return permissive;
 				}
 			}
-			const minimal = await authentication.getSession(providerId, GITHUB_SCOPE_USER_EMAIL, { silent: true });
+			const minimal = await authentication.getSession(providerId, GITHUB_SCOPE_USER_EMAIL, { silent: true, account: options?.account });
 			if (minimal) {
 				return minimal;
 			}
 			// This is what Completions extension use to ask for and is here mostly for backwards compatibility.
-			const fallback = await authentication.getSession(providerId, GITHUB_SCOPE_READ_USER, { silent: true });
+			const fallback = await authentication.getSession(providerId, GITHUB_SCOPE_READ_USER, { silent: true, account: options?.account });
 			if (fallback) {
 				return fallback;
 			}
@@ -107,7 +107,7 @@ export function getAlignedSession(configurationService: IConfigurationService, o
 	return getAuthSession(
 		providerId,
 		GITHUB_SCOPE_ALIGNED,
-		async () => await authentication.getSession(providerId, GITHUB_SCOPE_ALIGNED, { silent: true }),
+		async () => await authentication.getSession(providerId, GITHUB_SCOPE_ALIGNED, { silent: true, account: options?.account }),
 		options
 	);
 }

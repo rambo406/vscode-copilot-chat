@@ -53,6 +53,7 @@ import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
 import { isToolCallLimitCancellation, ISwitchToAutoOnRateLimitConfirmation } from '../common/specialRequestTypes';
+import { isUnsupportedModelParameterError, shouldSignalFallbackAccountRetry } from './automaticRetryClassifier';
 import { ChatTelemetry, ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
@@ -68,11 +69,6 @@ export interface IDefaultIntentRequestHandlerOptions {
 	confirmOnMaxToolIterations?: boolean;
 	temperature?: number;
 	overrideRequestLocation?: ChatLocation;
-}
-
-function isUnsupportedModelParameterError(fetchResult: { reason: string }): boolean {
-	return fetchResult.reason.includes('"code":"invalid_request_body"')
-		|| fetchResult.reason.includes('Unsupported value');
 }
 
 /*
@@ -522,6 +518,10 @@ export class DefaultIntentRequestHandler {
 							{ data: { copilotSwitchToAutoOnRateLimit: true, alwaysSwitchToAuto: false } satisfies ISwitchToAutoOnRateLimitConfirmation, label: l10n.t('Switch to Auto') },
 						];
 					}
+				}
+				if (fetchResult.type === ChatFetchResponseType.RateLimited
+					&& shouldSignalFallbackAccountRetry(this._configurationService.getConfig(ConfigKey.RateLimitAutoRetryWithFallbackAccount), fetchResult)) {
+					metadataFragment.shouldAutoRetryWithFallbackAccount = true;
 				}
 				const chatResult = { errorDetails, metadata: metadataFragment };
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);
