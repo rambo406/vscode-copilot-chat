@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.41.0",
+	"version": "0.42.2",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -3805,6 +3805,39 @@
 							"split"
 						]
 					},
+					"github.copilot.chat.reasoningEffort": {
+						"oneOf": [
+							{
+								"type": "string",
+								"description": "Global default reasoning effort level for all model families."
+							},
+							{
+								"type": "object",
+								"description": "Per-family reasoning effort overrides.",
+								"properties": {
+									"default": {
+										"type": "string",
+										"description": "Default reasoning effort applied to all families unless overridden."
+									}
+								},
+								"additionalProperties": {
+									"type": "string"
+								}
+							}
+						],
+						"markdownDescription": "Override the default reasoning effort level for the Thinking Effort dropdown. Accepts a plain string (e.g., `\"medium\"`) as a global default, or an object with `default` and per-family keys (e.g., `{ \"default\": \"medium\", \"claude\": \"high\" }`). Valid effort values include `none`, `low`, `medium`, `high`, and `xhigh`. Only applies to models that support reasoning effort.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.reasoningEffortFallbackModel": {
+						"type": "string",
+						"default": "claude-opus-4",
+						"markdownDescription": "Model selector to use when auto-retrying after the current model rejects a reasoning effort level. The first non-current model that exactly matches, starts with, or contains this value in its family, id, or display name is selected. Set to an empty string to disable fallback and downgrade effort instead.",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.responsesApiReasoningSummary": {
 						"type": "string",
 						"default": "detailed",
@@ -6177,10 +6210,10 @@
 		"vscode-dts:check": "node script/build/vscodeDtsCheck.js",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && node script/build/moveProposedDts.js",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && node script/build/moveProposedDts.js",
-		"build": "node .esbuild.ts --sourcemaps",
-		"compile": "node .esbuild.ts --dev",
+		"build": "node --experimental-strip-types .esbuild.ts --sourcemaps",
+		"compile": "node --experimental-strip-types .esbuild.ts --dev",
 		"watch": "npm-run-all -p watch:*",
-		"watch:esbuild": "node .esbuild.ts --watch --dev",
+		"watch:esbuild": "node --experimental-strip-types .esbuild.ts --watch --dev",
 		"watch:tsc-extension": "tsc --noEmit --watch --project tsconfig.json",
 		"watch:tsc-extension-web": "tsc --noEmit --watch --project tsconfig.worker.json",
 		"watch:tsc-simulation-workbench": "tsc --noEmit --watch --project test/simulation/workbench/tsconfig.json",

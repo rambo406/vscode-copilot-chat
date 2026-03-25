@@ -42,60 +42,14 @@ import type { LMResponsePart } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
+import { resolveReasoningEffortDefault } from '../common/reasoningEffort';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
 
 /**
  * Builds a configurationSchema for the model picker based on the endpoint's supported capabilities.
  * Models that support reasoning_effort get a "Thinking Effort" dropdown in the model picker UI.
  */
-/**
- * Resolves the default reasoning effort for a model, considering user settings.
- * @param settingValue The user's configured reasoning effort override (from IConfigurationService)
- * @param family The model family (e.g., 'claude-3.5-sonnet', 'gpt-4o')
- * @param effortLevels The model's supported effort levels
- * @param hardcodedDefault The hardcoded default for this family
- * @returns The resolved default effort level, or undefined if none is valid
- */
-export function resolveReasoningEffortDefault(
-	settingValue: string | Record<string, string> | undefined,
-	family: string,
-	effortLevels: readonly string[],
-	hardcodedDefault: string | undefined,
-): string | undefined {
-	if (settingValue === undefined || settingValue === null) {
-		return hardcodedDefault;
-	}
-
-	// Normalize string shorthand to object form
-	const config: Record<string, string> = typeof settingValue === 'string'
-		? { default: settingValue }
-		: settingValue;
-
-	const normalizedFamily = family.toLowerCase();
-
-	// Look for a family-specific override: check each key as a prefix of the family
-	let familyEffort: string | undefined;
-	for (const [key, value] of Object.entries(config)) {
-		if (key === 'default') {
-			continue;
-		}
-		if (normalizedFamily.startsWith(key.toLowerCase())) {
-			familyEffort = value;
-			break;
-		}
-	}
-
-	// Use family-specific override if found, otherwise fall back to 'default' key
-	const effort = familyEffort ?? config['default'];
-
-	if (effort && effortLevels.includes(effort)) {
-		return effort;
-	}
-
-	return hardcodedDefault;
-}
-
-function buildConfigurationSchema(endpoint: IChatEndpoint, configurationService?: IConfigurationService): { configurationSchema?: vscode.LanguageModelConfigurationSchema } {
+export function buildConfigurationSchema(endpoint: IChatEndpoint, logService: ILogService, configurationService: IConfigurationService): { configurationSchema?: vscode.LanguageModelConfigurationSchema } {
 	const effortLevels = endpoint.supportsReasoningEffort;
 	if (!effortLevels || effortLevels.length === 0) {
 		return {};
@@ -113,8 +67,9 @@ function buildConfigurationSchema(endpoint: IChatEndpoint, configurationService?
 	}
 
 	const hardcodedDefault = family.startsWith('claude') ? 'high' : 'medium';
-	const settingValue = configurationService?.get(ConfigKey.Advanced.ReasoningEffortOverride);
-	const defaultEffort = resolveReasoningEffortDefault(settingValue, endpoint.family, effortLevels, effortLevels.includes(hardcodedDefault) ? hardcodedDefault : undefined);
+	const settingValue = configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride);
+	logService.info(`[ReasoningEffort] buildConfigurationSchema: family='${family}', effortLevels=[${effortLevels.join(', ')}], settingValue=${JSON.stringify(settingValue)}, hardcodedDefault='${hardcodedDefault}'`);
+	const { effort: defaultEffort } = resolveReasoningEffortDefault(settingValue, family, effortLevels, hardcodedDefault, logService);
 
 	return {
 		configurationSchema: {
@@ -123,13 +78,19 @@ function buildConfigurationSchema(endpoint: IChatEndpoint, configurationService?
 					type: 'string',
 					title: vscode.l10n.t('Thinking Effort'),
 					enum: effortLevels,
-					enumItemLabels: effortLevels.map(level => level.charAt(0).toUpperCase() + level.slice(1)),
+					enumItemLabels: effortLevels.map(level => {
+						switch (level) {
+							case 'xhigh': return 'Extra High';
+							default: return level.charAt(0).toUpperCase() + level.slice(1);
+						}
+					}),
 					enumDescriptions: effortLevels.map(level => {
 						switch (level) {
 							case 'none': return vscode.l10n.t('No reasoning applied');
 							case 'low': return vscode.l10n.t('Faster responses with less reasoning');
 							case 'medium': return vscode.l10n.t('Balanced reasoning and speed');
 							case 'high': return vscode.l10n.t('Maximum reasoning depth');
+							case 'xhigh': return vscode.l10n.t('Extended reasoning for the most complex tasks');
 							default: return level;
 						}
 					}),
@@ -390,7 +351,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
 				},
-				...buildConfigurationSchema(endpoint, this._configurationService),
+				...buildConfigurationSchema(endpoint, this._logService, this._configurationService),
 			};
 
 			models.push(model);
@@ -665,6 +626,25 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		// This links the wrapper's chat span back to the original invoke_agent trace.
 		const parentTraceContext = (_options as { modelOptions?: OTelModelOptions }).modelOptions?._otelTraceContext ?? undefined;
 
+		// Determine the reasoning effort: the setting override takes priority over the dropdown value.
+		const dropdownEffort = typeof _options.modelConfiguration?.reasoningEffort === 'string' ? _options.modelConfiguration.reasoningEffort : undefined;
+		let effectiveReasoningEffort = dropdownEffort;
+		const effortLevels = _endpoint.supportsReasoningEffort;
+		if (effortLevels && effortLevels.length > 0) {
+			const settingValue = this._configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride);
+			if (settingValue !== undefined && settingValue !== null) {
+				const family = _endpoint.family;
+				const hardcodedDefault = family.toLowerCase().startsWith('claude') ? 'high' : 'medium';
+				const resolved = resolveReasoningEffortDefault(settingValue, family, effortLevels, hardcodedDefault, this._logService);
+				if (resolved.source !== 'hardcoded') {
+					if (dropdownEffort !== undefined && dropdownEffort !== resolved.effort) {
+						this._logService.info(`[ReasoningEffort] Setting override replaces dropdown value: '${dropdownEffort}' → '${resolved.effort}' (source: ${resolved.source})`);
+					}
+					effectiveReasoningEffort = resolved.effort;
+				}
+			}
+		}
+
 		const makeRequest = () => endpoint.makeChatRequest2({
 			debugName: 'copilotLanguageModelWrapper',
 			messages,
@@ -674,7 +654,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			requestOptions: options,
 			userInitiatedRequest: !!extensionId,
 			telemetryProperties,
-			reasoningEffort: typeof _options.modelConfiguration?.reasoningEffort === 'string' ? _options.modelConfiguration.reasoningEffort : undefined,
+			reasoningEffort: effectiveReasoningEffort,
 		}, token);
 
 		// Run request within the parent OTel context (no extra span) so chat spans in chatMLFetcher inherit the agent trace

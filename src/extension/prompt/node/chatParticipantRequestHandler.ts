@@ -49,6 +49,11 @@ export interface IChatAgentArgs {
 	intentId?: string;
 }
 
+interface IChatParticipantRequestHandlerOptions {
+	readonly telemetryMessageId?: string;
+	readonly seedConversation?: Conversation;
+}
+
 /**
  * Handles a single chat request:
  * 1) selects intent
@@ -73,7 +78,7 @@ export class ChatParticipantRequestHandler {
 		private readonly token: CancellationToken,
 		private readonly chatAgentArgs: IChatAgentArgs,
 		private readonly yieldRequested: () => boolean,
-		telemetryMessageId: string | undefined,
+		telemetryOrOptions: string | IChatParticipantRequestHandlerOptions | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
@@ -107,7 +112,15 @@ export class ChatParticipantRequestHandler {
 			});
 		}
 
-		const { turns, sessionId } = _instantiationService.invokeFunction(accessor => addHistoryToConversation(accessor, rawHistory));
+		const handlerOptions = typeof telemetryOrOptions === 'string' || telemetryOrOptions === undefined
+			? { telemetryMessageId: telemetryOrOptions, seedConversation: undefined }
+			: telemetryOrOptions;
+		const { telemetryMessageId, seedConversation } = handlerOptions;
+
+		const historyState = seedConversation
+			? { turns: [...seedConversation.turns], sessionId: seedConversation.sessionId }
+			: _instantiationService.invokeFunction(accessor => addHistoryToConversation(accessor, rawHistory));
+		const { turns, sessionId } = historyState;
 		normalizeSummariesOnRounds(turns);
 		// Use session ID from history, then VS Code's request.sessionId, then fallback to UUID
 		const actualSessionId = sessionId ?? request.sessionId ?? generateUuid();

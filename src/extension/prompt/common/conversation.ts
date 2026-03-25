@@ -401,6 +401,7 @@ export interface IResultMetadata {
 	promptTokens?: number;
 	outputTokens?: number;
 	shouldAutoSwitchToAuto?: boolean;
+	/** When set, the request should retry by continuing with the configured fallback model (or a downgraded effort if fallback selection is disabled). */
 	shouldAutoRetryWithFallbackModel?: boolean;
 }
 

@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatAgentService, defaultAgentName, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
@@ -17,7 +18,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatRequest } from '../../../vscodeTypes';
 import { Intent, agentsToCommands } from '../../common/constants';
 import { ICopilotChatResultIn } from '../../prompt/common/conversation';
-import { getSwitchToAutoOnRateLimitConfirmation } from '../../prompt/common/specialRequestTypes';
+import { IContinueOnErrorConfirmation, getSwitchToAutoOnRateLimitConfirmation, isContinueOnError } from '../../prompt/common/specialRequestTypes';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
@@ -231,8 +232,15 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				commandsForAgent[request.command] :
 				defaultIntentId;
 
-			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
+			let handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
 			let result = await handler.getResult();
+
+			const retryAsContinuation = async (retryRequest: ChatRequest) => {
+				const retrySeedConversation = handler.conversation;
+				request = this.createContinuationRetryRequest(retryRequest);
+				handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, { telemetryMessageId, seedConversation: retrySeedConversation });
+				result = await handler.getResult();
+			};
 
 			// Auto-retry with Auto model when the setting is enabled and the handler signals it
 			if ((result as ICopilotChatResultIn).metadata?.shouldAutoSwitchToAuto) {
@@ -240,8 +248,38 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				const switchedRequest = await this.switchToAutoModel(request, stream, false);
 				if (switchedRequest.model?.id !== previousModelId) {
 					request = switchedRequest;
-					const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
-					result = await retryHandler.getResult();
+					handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
+					result = await handler.getResult();
+				}
+			}
+
+			// Auto-retry with a fallback model when the model rejects the current reasoning effort level
+			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel) {
+				const previousModelId = request.model?.id;
+				const switchedRequest = await this.switchToFallbackModel(request, stream);
+				if (switchedRequest.model?.id !== previousModelId) {
+					await retryAsContinuation(switchedRequest);
+				} else {
+					// Fallback model not available — fall back to downgrading effort on the current model
+					const effortLevels = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
+					const currentEffort = typeof request.modelConfiguration?.reasoningEffort === 'string' ? request.modelConfiguration.reasoningEffort : undefined;
+					if (currentEffort) {
+						const currentIndex = effortLevels.findIndex(level => level === currentEffort);
+						if (currentIndex > 0) {
+							const downgradedEffort = effortLevels[currentIndex - 1];
+							stream.warning(new vscode.MarkdownString(
+								vscode.l10n.t("Reasoning effort ''{0}'' is not supported by this model. Retrying with ''{1}''...", currentEffort, downgradedEffort)
+							));
+							await retryAsContinuation({
+								...request,
+								modelConfiguration: {
+									...request.modelConfiguration,
+									reasoningEffort: downgradedEffort,
+									_skipReasoningEffortOverride: true
+								}
+							});
+						}
+					}
 				}
 			}
 
@@ -307,6 +345,88 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		}
 		stream.warning(new vscode.MarkdownString(vscode.l10n.t('You were rate-limited on the selected model. Switching to Auto and retrying your request.')));
 		return request;
+	}
+
+	private async switchToFallbackModel(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<ChatRequest> {
+		const fallbackSelector = this.configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortFallbackModel)?.trim();
+		if (!fallbackSelector) {
+			return request;
+		}
+
+		const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+		const fallbackModel = this.findConfiguredFallbackModel(allModels, fallbackSelector, request.model?.id);
+		if (!fallbackModel) {
+			return request;
+		}
+
+		await vscode.commands.executeCommand('workbench.action.chat.changeModel', { vendor: fallbackModel.vendor, id: fallbackModel.id, family: fallbackModel.family });
+		const currentEffort = typeof request.modelConfiguration?.reasoningEffort === 'string' ? request.modelConfiguration.reasoningEffort : undefined;
+		request = {
+			...request,
+			model: fallbackModel,
+		};
+		stream.warning(new vscode.MarkdownString(
+			vscode.l10n.t("Reasoning effort ''{0}'' is not supported by the current model. Retrying with {1}...", currentEffort ?? 'unknown', fallbackModel.name ?? fallbackModel.family)
+		));
+		return request;
+	}
+
+	private createContinuationRetryRequest(request: ChatRequest): ChatRequest {
+		if (isContinueOnError(request)) {
+			return request;
+		}
+
+		return {
+			...request,
+			prompt: l10n.t('Try Again'),
+			acceptedConfirmationData: [
+				...(request.acceptedConfirmationData ?? []),
+				{ copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation,
+			],
+		};
+	}
+
+	private findConfiguredFallbackModel(models: readonly vscode.LanguageModelChat[], selector: string, currentModelId: string | undefined): vscode.LanguageModelChat | undefined {
+		const normalizedSelector = selector.trim().toLowerCase();
+		if (!normalizedSelector) {
+			return undefined;
+		}
+
+		const candidates = models
+			.filter(model => model.id !== currentModelId)
+			.map(model => ({ model, score: this.getFallbackModelMatchScore(model, normalizedSelector) }))
+			.filter((candidate): candidate is { model: vscode.LanguageModelChat; score: number } => candidate.score !== undefined)
+			.sort((a, b) => a.score - b.score);
+
+		return candidates[0]?.model;
+	}
+
+	private getFallbackModelMatchScore(model: vscode.LanguageModelChat, normalizedSelector: string): number | undefined {
+		const values = [model.family, model.id, model.name]
+			.filter((value): value is string => typeof value === 'string' && value.length > 0)
+			.map(value => value.toLowerCase());
+
+		let bestScore: number | undefined;
+		for (const value of values) {
+			let score: number | undefined;
+			if (value === normalizedSelector) {
+				score = 0;
+			} else if (value.startsWith(normalizedSelector)) {
+				score = 1;
+			} else if (normalizedSelector.startsWith(value)) {
+				score = 2;
+			} else if (value.includes(normalizedSelector)) {
+				score = 3;
+			} else if (normalizedSelector.includes(value)) {
+				score = 4;
+			}
+
+			if (score !== undefined && (bestScore === undefined || score < bestScore)) {
+				bestScore = score;
+			}
+		}
+
+		return bestScore;
 	}
 
 }

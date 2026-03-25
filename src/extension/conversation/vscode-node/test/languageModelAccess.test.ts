@@ -14,7 +14,8 @@ import { ITestingServicesAccessor } from '../../../../platform/test/node/service
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionTestingServices } from '../../../test/vscode-node/services';
-import { CopilotLanguageModelWrapper, resolveReasoningEffortDefault } from '../languageModelAccess';
+import { resolveReasoningEffortDefault } from '../../common/reasoningEffort';
+import { CopilotLanguageModelWrapper } from '../languageModelAccess';
 
 
 suite('CopilotLanguageModelWrapper', () => {
@@ -93,54 +94,54 @@ suite('resolveReasoningEffortDefault', () => {
 	const effortLevels = ['low', 'medium', 'high'];
 
 	test('returns hardcoded default when setting is undefined', () => {
-		assert.strictEqual(resolveReasoningEffortDefault(undefined, 'claude-3.5-sonnet', effortLevels, 'high'), 'high');
+		assert.strictEqual(resolveReasoningEffortDefault(undefined, 'claude-3.5-sonnet', effortLevels, 'high').effort, 'high');
 	});
 
 	test('returns hardcoded default when setting is null-ish', () => {
-		assert.strictEqual(resolveReasoningEffortDefault(undefined, 'gpt-4o', effortLevels, 'medium'), 'medium');
+		assert.strictEqual(resolveReasoningEffortDefault(undefined, 'gpt-4o', effortLevels, 'medium').effort, 'medium');
 	});
 
 	test('global string shorthand applied', () => {
-		assert.strictEqual(resolveReasoningEffortDefault('low', 'claude-3.5-sonnet', effortLevels, 'high'), 'low');
+		assert.strictEqual(resolveReasoningEffortDefault('low', 'claude-3.5-sonnet', effortLevels, 'high').effort, 'low');
 	});
 
 	test('global string shorthand applied to GPT', () => {
-		assert.strictEqual(resolveReasoningEffortDefault('high', 'gpt-4o', effortLevels, 'medium'), 'high');
+		assert.strictEqual(resolveReasoningEffortDefault('high', 'gpt-4o', effortLevels, 'medium').effort, 'high');
 	});
 
 	test('object with default key applied', () => {
-		assert.strictEqual(resolveReasoningEffortDefault({ default: 'low' }, 'gpt-4o', effortLevels, 'medium'), 'low');
+		assert.strictEqual(resolveReasoningEffortDefault({ default: 'low' }, 'gpt-4o', effortLevels, 'medium').effort, 'low');
 	});
 
 	test('per-family key takes precedence over default', () => {
-		assert.strictEqual(resolveReasoningEffortDefault({ default: 'low', claude: 'medium' }, 'claude-3.5-sonnet', effortLevels, 'high'), 'medium');
+		assert.strictEqual(resolveReasoningEffortDefault({ default: 'low', claude: 'medium' }, 'claude-3.5-sonnet', effortLevels, 'high').effort, 'medium');
 	});
 
 	test('default key used when no family match', () => {
-		assert.strictEqual(resolveReasoningEffortDefault({ default: 'low', claude: 'high' }, 'gpt-4o', effortLevels, 'medium'), 'low');
+		assert.strictEqual(resolveReasoningEffortDefault({ default: 'low', claude: 'high' }, 'gpt-4o', effortLevels, 'medium').effort, 'low');
 	});
 
-	test('invalid effort falls back to hardcoded default', () => {
-		assert.strictEqual(resolveReasoningEffortDefault('none', 'claude-3.5-sonnet', effortLevels, 'high'), 'high');
+	test('invalid effort is still applied', () => {
+		assert.strictEqual(resolveReasoningEffortDefault('none', 'claude-3.5-sonnet', effortLevels, 'high').effort, 'none');
 	});
 
-	test('invalid per-family effort falls back to hardcoded default', () => {
-		assert.strictEqual(resolveReasoningEffortDefault({ claude: 'none' }, 'claude-3.5-sonnet', effortLevels, 'high'), 'high');
+	test('invalid per-family effort is still applied', () => {
+		assert.strictEqual(resolveReasoningEffortDefault({ claude: 'none' }, 'claude-3.5-sonnet', effortLevels, 'high').effort, 'none');
 	});
 
 	test('family key matching is case-insensitive prefix', () => {
-		assert.strictEqual(resolveReasoningEffortDefault({ Claude: 'low' }, 'claude-3.5-sonnet', effortLevels, 'high'), 'low');
+		assert.strictEqual(resolveReasoningEffortDefault({ Claude: 'low' }, 'claude-3.5-sonnet', effortLevels, 'high').effort, 'low');
 	});
 
 	test('family key matching works with gpt prefix', () => {
-		assert.strictEqual(resolveReasoningEffortDefault({ 'gpt': 'high' }, 'gpt-4o', effortLevels, 'medium'), 'high');
+		assert.strictEqual(resolveReasoningEffortDefault({ 'gpt': 'high' }, 'gpt-4o', effortLevels, 'medium').effort, 'high');
 	});
 
 	test('returns undefined hardcoded default as-is when no setting', () => {
-		assert.strictEqual(resolveReasoningEffortDefault(undefined, 'unknown-model', effortLevels, undefined), undefined);
+		assert.strictEqual(resolveReasoningEffortDefault(undefined, 'unknown-model', effortLevels, undefined).effort, undefined);
 	});
 
 	test('valid effort from setting overrides undefined hardcoded default', () => {
-		assert.strictEqual(resolveReasoningEffortDefault('medium', 'unknown-model', effortLevels, undefined), 'medium');
+		assert.strictEqual(resolveReasoningEffortDefault('medium', 'unknown-model', effortLevels, undefined).effort, 'medium');
 	});
 });

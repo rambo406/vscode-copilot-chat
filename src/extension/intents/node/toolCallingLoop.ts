@@ -36,6 +36,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelTextPart, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
+import { resolveReasoningEffortDefault } from '../../conversation/common/reasoningEffort';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
@@ -406,6 +407,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			case ChatFetchResponseType.QuotaExceeded:
 			case ChatFetchResponseType.Canceled:
 			case ChatFetchResponseType.OffTopic:
+			case ChatFetchResponseType.BadRequest:
 				return false;
 			default:
 				return response.type !== ChatFetchResponseType.Success;
@@ -1140,7 +1142,30 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
 		const rawEffort = this.options.request.modelConfiguration?.reasoningEffort;
-		const reasoningEffort = typeof rawEffort === 'string' ? rawEffort : undefined;
+		let reasoningEffort = typeof rawEffort === 'string' ? rawEffort : undefined;
+
+		// Skip setting override if effort was explicitly downgraded by the auto-retry logic.
+		// This prevents the override from re-applying the unsupported effort value.
+		const skipReasoningEffortOverride = this.options.request.modelConfiguration?._skipReasoningEffortOverride === true;
+
+		// Apply setting override: github.copilot.chat.reasoningEffort takes priority
+		// over the dropdown value
+		const effortLevels = endpoint.supportsReasoningEffort;
+		this._logService.info(`[ReasoningEffort DEBUG] dropdown='${reasoningEffort}', effortLevels=${JSON.stringify(effortLevels)}, family='${endpoint.family}', settingValue=${JSON.stringify(this._configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride))}`);
+		if (!skipReasoningEffortOverride && effortLevels && effortLevels.length > 0) {
+			const settingValue = this._configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride);
+			if (settingValue !== undefined && settingValue !== null) {
+				const family = endpoint.family;
+				const hardcodedDefault = family.toLowerCase().startsWith('claude') ? 'high' : 'medium';
+				const resolved = resolveReasoningEffortDefault(settingValue, family, effortLevels, hardcodedDefault, this._logService);
+				if (resolved.source !== 'hardcoded') {
+					if (reasoningEffort !== undefined && reasoningEffort !== resolved.effort) {
+						this._logService.info(`[ReasoningEffort] Setting override replaces dropdown value: '${reasoningEffort}' → '${resolved.effort}' (source: ${resolved.source})`);
+					}
+					reasoningEffort = resolved.effort;
+				}
+			}
+		}
 		const shouldDisableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(effectiveBuildPromptResult.messages);
 		const enableThinking = !shouldDisableThinking;
 		let phase: string | undefined;

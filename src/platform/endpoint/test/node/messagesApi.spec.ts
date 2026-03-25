@@ -6,8 +6,15 @@
 import type { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
+import { ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../../chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
+import { ILogService } from '../../../log/common/logService';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
-import { addToolsAndSystemCacheControl, rawMessagesToMessagesAPI } from '../../node/messagesApi';
+import { IChatEndpoint } from '../../../networking/common/networking';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
+import { addToolsAndSystemCacheControl, createMessagesRequestBody, rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
 	expect(Array.isArray(content)).toBe(true);
@@ -685,5 +692,135 @@ suite('rawMessagesToMessagesAPI with cacheTtl', function () {
 		const cachedSystemBlock = result.system!.find(b => b.cache_control);
 		expect(cachedSystemBlock).toBeDefined();
 		expect(cachedSystemBlock!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+	});
+});
+
+suite('createMessagesRequestBody effort mapping', function () {
+	function createMockAccessor(configOverrides?: Partial<{
+		thinkingBudget: number;
+		forceExtendedThinking: boolean;
+	}>): ServicesAccessor {
+		const mockConfigurationService: Partial<IConfigurationService> = {
+			getConfig: () => false as any,
+			getExperimentBasedConfig: ((key: { fullyQualifiedId: string }) => {
+				if (key.fullyQualifiedId === ConfigKey.AnthropicThinkingBudget.fullyQualifiedId) {
+					return configOverrides?.thinkingBudget ?? 16000;
+				}
+				if (key.fullyQualifiedId === ConfigKey.AnthropicForceExtendedThinking.fullyQualifiedId) {
+					return configOverrides?.forceExtendedThinking ?? false;
+				}
+				return false;
+			}) as any,
+		};
+
+		const mockLogService: Partial<ILogService> = {
+			trace: () => { },
+			debug: () => { },
+			info: () => { },
+			warn: () => { },
+			error: () => { },
+		};
+
+		const mockTelemetryService: Partial<ITelemetryService> = {
+			sendMSFTTelemetryEvent: () => { },
+		};
+
+		const mockExperimentationService: Partial<IExperimentationService> = {
+			onDidTreatmentsChange: { event: () => ({ dispose: () => { } }) } as any,
+		};
+
+		const services = new Map<unknown, unknown>();
+		services.set(IConfigurationService, mockConfigurationService);
+		services.set(ILogService, mockLogService);
+		services.set(ITelemetryService, mockTelemetryService);
+		services.set(IExperimentationService, mockExperimentationService);
+
+		return {
+			get: <T>(id: { _serviceBrand?: undefined } & ((...args: any[]) => any)): T => services.get(id) as T,
+		} as ServicesAccessor;
+	}
+
+	function createMockEndpoint(overrides?: Partial<IChatEndpoint>): IChatEndpoint {
+		return {
+			model: 'claude-sonnet-4',
+			family: 'claude-sonnet-4',
+			name: 'Claude Sonnet 4',
+			modelProvider: 'anthropic',
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: ['low', 'medium', 'high', 'xhigh'],
+			supportsThinkingContentInHistory: true,
+			supportsToolCalls: true,
+			supportsVision: false,
+			supportsPrediction: false,
+			showInModelPicker: true,
+			isFallback: false,
+			maxOutputTokens: 16384,
+			...overrides,
+		} as unknown as IChatEndpoint;
+	}
+
+	test('sets output_config.effort to xhigh when endpoint supports adaptive thinking and reasoningEffort is xhigh', function () {
+		const accessor = createMockAccessor();
+		const endpoint = createMockEndpoint();
+		const options = {
+			debugName: 'test',
+			messages: [
+				{ role: Raw.ChatRole.User, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' }] },
+			] as Raw.ChatMessage[],
+			finishedCb: undefined,
+			location: ChatLocation.Panel,
+			requestId: 'test-request-id',
+			postOptions: { max_tokens: 16384 },
+			enableThinking: true,
+			reasoningEffort: 'xhigh',
+		};
+
+		const result = createMessagesRequestBody(accessor, options as any, 'claude-sonnet-4', endpoint);
+
+		expect(result.output_config).toBeDefined();
+		expect(result.output_config!.effort).toBe('xhigh');
+	});
+
+	test('sets output_config.effort to high when reasoningEffort is high', function () {
+		const accessor = createMockAccessor();
+		const endpoint = createMockEndpoint();
+		const options = {
+			debugName: 'test',
+			messages: [
+				{ role: Raw.ChatRole.User, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' }] },
+			] as Raw.ChatMessage[],
+			finishedCb: undefined,
+			location: ChatLocation.Panel,
+			requestId: 'test-request-id',
+			postOptions: { max_tokens: 16384 },
+			enableThinking: true,
+			reasoningEffort: 'high',
+		};
+
+		const result = createMessagesRequestBody(accessor, options as any, 'claude-sonnet-4', endpoint);
+
+		expect(result.output_config).toBeDefined();
+		expect(result.output_config!.effort).toBe('high');
+	});
+
+	test('does not set output_config when adaptive thinking is not supported', function () {
+		const accessor = createMockAccessor();
+		const endpoint = createMockEndpoint({ supportsAdaptiveThinking: false });
+		const options = {
+			debugName: 'test',
+			messages: [
+				{ role: Raw.ChatRole.User, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' }] },
+			] as Raw.ChatMessage[],
+			finishedCb: undefined,
+			location: ChatLocation.Panel,
+			requestId: 'test-request-id',
+			postOptions: { max_tokens: 16384 },
+			enableThinking: true,
+			reasoningEffort: 'xhigh',
+		};
+
+		const result = createMessagesRequestBody(accessor, options as any, 'claude-sonnet-4', endpoint);
+
+		expect(result.output_config).toBeUndefined();
 	});
 });

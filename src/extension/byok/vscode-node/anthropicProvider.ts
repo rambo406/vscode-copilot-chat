@@ -265,7 +265,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			const rawEffort = options.modelConfiguration?.reasoningEffort;
 			const effort = supportsAdaptiveThinking && typeof rawEffort === 'string'
-				? rawEffort as 'low' | 'medium' | 'high'
+				? rawEffort as 'low' | 'medium' | 'high' | 'xhigh'
 				: undefined;
 
 			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
@@ -278,7 +278,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				thinking: supportsAdaptiveThinking
 					? { type: 'adaptive' as const }
 					: thinkingBudget ? { type: 'enabled' as const, budget_tokens: thinkingBudget } : undefined,
-				...(effort ? { output_config: { effort } } : {}),
+				...(effort ? { output_config: { effort: effort as 'low' | 'medium' | 'high' } } : {}),
 				context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 			};
 

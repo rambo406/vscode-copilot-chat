@@ -159,10 +159,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const thinkingEnabled = !!thinkingConfig;
 
 	// Build output config with effort level for adaptive thinking, validating reasoningEffort
-	let effort: 'low' | 'medium' | 'high' | undefined;
+	let effort: 'low' | 'medium' | 'high' | 'xhigh' | undefined;
 	if (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive') {
 		const candidateEffort = reasoningEffort;
-		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
+		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high' || candidateEffort === 'xhigh') {
 			effort = candidateEffort;
 		}
 	}

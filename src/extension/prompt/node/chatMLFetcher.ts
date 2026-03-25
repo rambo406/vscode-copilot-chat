@@ -1424,6 +1424,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				};
 			}
 
+			if (response.status === 400 && jsonData?.code === 'invalid_request_body') {
+				return {
+					type: FetchResponseKind.Failed,
+					modelRequestId: modelRequestIdObj,
+					failKind: ChatFailKind.ValidationFailed,
+					reason: jsonData.message || reason,
+				};
+			}
+
 			if (response.status === 401 || response.status === 403) {
 				// Token has expired or invalid, fetch a new one on next request
 				// TODO(drifkin): these actions should probably happen in vsc specific code
@@ -1832,7 +1841,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (response.failKind === ChatFailKind.OffTopic) {
 			return { type: ChatFetchResponseType.OffTopic, reason, requestId, serverRequestId };
 		}
-		if (response.failKind === ChatFailKind.TokenExpiredOrInvalid || response.failKind === ChatFailKind.ClientNotSupported || reason.includes('Bad request: ')) {
+		if (response.failKind === ChatFailKind.TokenExpiredOrInvalid || response.failKind === ChatFailKind.ClientNotSupported || response.failKind === ChatFailKind.ValidationFailed || reason.includes('Bad request: ')) {
 			return { type: ChatFetchResponseType.BadRequest, reason, requestId, serverRequestId };
 		}
 		if (response.failKind === ChatFailKind.ServerError) {

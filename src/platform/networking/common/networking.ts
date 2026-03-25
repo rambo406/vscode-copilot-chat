@@ -116,7 +116,7 @@ export interface IEndpointBody {
 		budget_tokens?: number;
 	};
 	output_config?: {
-		effort?: 'low' | 'medium' | 'high';
+		effort?: 'low' | 'medium' | 'high' | 'xhigh';
 	};
 
 	/** ChatCompletions API for Anthropic models */

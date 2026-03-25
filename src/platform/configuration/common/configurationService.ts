@@ -603,12 +603,15 @@ export namespace ConfigKey {
 		export const EditRecordingEnabled = defineAndMigrateSetting('chat.advanced.editRecording.enabled', 'chat.editRecording.enabled', false);
 		export const CodeSearchAgentEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.codesearch.agent.enabled', 'chat.codesearch.agent.enabled', true);
 		export const AgentTemperature = defineAndMigrateSetting<number | undefined>('chat.advanced.agent.temperature', 'chat.agent.temperature', undefined);
-		export const ReasoningEffortOverride = defineSetting<string | Record<string, string> | undefined>('chat.reasoningEffort', ConfigType.Simple, undefined);
 		export const EnableUserPreferences = defineAndMigrateSetting<boolean>('chat.advanced.enableUserPreferences', 'chat.enableUserPreferences', false);
 		export const SummarizeAgentConversationHistoryThreshold = defineAndMigrateSetting<number | undefined>('chat.advanced.summarizeAgentConversationHistoryThreshold', 'chat.summarizeAgentConversationHistoryThreshold', undefined);
 		export const AgentHistorySummarizationMode = defineAndMigrateSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', 'chat.agentHistorySummarizationMode', undefined);
 		export const UseResponsesApiTruncation = defineAndMigrateSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', 'chat.useResponsesApiTruncation', false);
 		export const OmitBaseAgentInstructions = defineAndMigrateSetting<boolean>('chat.advanced.omitBaseAgentInstructions', 'chat.omitBaseAgentInstructions', false);
+		/** Override the default reasoning effort level for models that support it. Accepts a string (global default) or an object with `default` and per-family keys. */
+		export const ReasoningEffortOverride = defineSetting<string | Record<string, string> | undefined>('chat.reasoningEffort', ConfigType.Simple, undefined);
+		/** Model selector to use when auto-retrying after a reasoning-effort rejection. Matches exact and prefix/fragment hits across model family, id, and display name. */
+		export const ReasoningEffortFallbackModel = defineSetting<string>('chat.reasoningEffortFallbackModel', ConfigType.Simple, 'claude-opus-4');
 		export const CLIPlanExitModeEnabled = defineSetting<boolean>('chat.cli.planExitMode.enabled', ConfigType.Simple, false);
 		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', true);
 		export const CLIBranchSupport = defineSetting<boolean>('chat.cli.branchSupport.enabled', ConfigType.Simple, false);

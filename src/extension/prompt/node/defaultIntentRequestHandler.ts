@@ -170,7 +170,8 @@ export class DefaultIntentRequestHandler {
 			};
 			mixin(chatResult, { metadata: metadataFragment }, true);
 			const baseModelTelemetry = createTelemetryWithId();
-			chatResult = await this.processResult(resultDetails.response, responseMessage, chatResult, metadataFragment, baseModelTelemetry, resultDetails.toolCallRounds);
+			const supportsContinueOnError = typeof intentInvocation.modifyErrorDetails === 'function';
+			chatResult = await this.processResult(resultDetails.response, responseMessage, chatResult, metadataFragment, baseModelTelemetry, resultDetails.toolCallRounds, supportsContinueOnError);
 			if (chatResult.errorDetails && intentInvocation.modifyErrorDetails) {
 				chatResult.errorDetails = intentInvocation.modifyErrorDetails(chatResult.errorDetails, resultDetails.response);
 			}
@@ -494,7 +495,7 @@ export class DefaultIntentRequestHandler {
 		return {};
 	}
 
-	private async processResult(fetchResult: ChatResponse, responseMessage: string, chatResult: ChatResult | void, metadataFragment: Partial<IResultMetadata>, baseModelTelemetry: ConversationalBaseTelemetryData, rounds: IToolCallRound[]): Promise<ChatResult> {
+	private async processResult(fetchResult: ChatResponse, responseMessage: string, chatResult: ChatResult | void, metadataFragment: Partial<IResultMetadata>, baseModelTelemetry: ConversationalBaseTelemetryData, rounds: IToolCallRound[], supportsContinueOnError: boolean): Promise<ChatResult> {
 		switch (fetchResult.type) {
 			case ChatFetchResponseType.Success:
 				return await this.processSuccessfulFetchResult(responseMessage, fetchResult.requestId, chatResult ?? {}, baseModelTelemetry, rounds);
@@ -527,7 +528,18 @@ export class DefaultIntentRequestHandler {
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
 			}
-			case ChatFetchResponseType.BadRequest:
+			case ChatFetchResponseType.BadRequest: {
+				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
+				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
+				if (supportsContinueOnError && (fetchResult.reason?.includes('Unsupported value') || fetchResult.reason?.includes('invalid_request_body'))) {
+					metadataFragment.shouldAutoRetryWithFallbackModel = true;
+					const chatResult = { errorDetails, metadata: metadataFragment };
+					return chatResult;
+				}
+				const chatResult = { errorDetails, metadata: metadataFragment };
+				this.turn.setResponse(TurnStatus.Error, { message: errorDetails.message, type: 'server' }, baseModelTelemetry.properties.messageId, chatResult);
+				return chatResult;
+			}
 			case ChatFetchResponseType.NetworkError:
 			case ChatFetchResponseType.Failed: {
 				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
