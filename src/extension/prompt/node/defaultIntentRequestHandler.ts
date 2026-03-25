@@ -68,7 +68,6 @@ export interface IDefaultIntentRequestHandlerOptions {
 	confirmOnMaxToolIterations?: boolean;
 	temperature?: number;
 	overrideRequestLocation?: ChatLocation;
-	hideRateLimitTimeEstimate?: boolean;
 }
 
 function isUnsupportedModelParameterError(fetchResult: { reason: string }): boolean {
@@ -511,7 +510,7 @@ export class DefaultIntentRequestHandler {
 			case ChatFetchResponseType.QuotaExceeded:
 			case ChatFetchResponseType.RateLimited: {
 				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
-				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus, this.handlerOptions.hideRateLimitTimeEstimate);
+				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
 				if (fetchResult.type === ChatFetchResponseType.RateLimited
 					&& fetchResult.capiError?.code?.startsWith('user_model_rate_limited')
 					&& !fetchResult.isAuto) {

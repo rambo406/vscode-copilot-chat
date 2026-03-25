@@ -293,10 +293,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as StopHookOutput;
-						this._logService.trace(`[ToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
-						if (hookOutput.decision === 'block' && hookOutput.reason) {
-							this._logService.trace(`[ToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
-							blockingReasons.add(hookOutput.reason);
+						const specific = hookOutput.hookSpecificOutput;
+						this._logService.trace(`[ToolCallingLoop] Checking hook output: decision=${specific?.decision}, reason=${specific?.reason}`);
+						if (specific?.decision === 'block' && specific.reason) {
+							this._logService.trace(`[ToolCallingLoop] Stop hook blocked: ${specific.reason}`);
+							blockingReasons.add(specific.reason);
 						}
 					}
 				},
@@ -520,10 +521,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as SubagentStopHookOutput;
-						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
-						if (hookOutput.decision === 'block' && hookOutput.reason) {
-							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${hookOutput.reason}`);
-							blockingReasons.add(hookOutput.reason);
+						const specific = hookOutput.hookSpecificOutput;
+						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${specific?.decision}, reason=${specific?.reason}`);
+						if (specific?.decision === 'block' && specific.reason) {
+							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${specific.reason}`);
+							blockingReasons.add(specific.reason);
 						}
 					}
 				},
@@ -1433,7 +1435,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				if (next.role === Raw.ChatRole.Assistant) {
 					break;
 				}
-				if (next.role === Raw.ChatRole.Tool && next.toolCallId) {
+				if (next.role === Raw.ChatRole.Tool && next.toolCallId !== undefined) {
 					toolResultIds.add(next.toolCallId);
 				}
 			}
