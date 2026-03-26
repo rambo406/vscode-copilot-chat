@@ -19,6 +19,7 @@ import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
+import { IRateLimitSimulationService } from '../../common/rateLimitSimulationService';
 import { ChatEndpoint } from '../../node/chatEndpoint';
 
 export class CustomNesEndpoint extends ChatEndpoint {
@@ -35,7 +36,8 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
-		@ILogService logService: ILogService
+		@ILogService logService: ILogService,
+		@IRateLimitSimulationService rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: CHAT_MODEL.CUSTOM_NES,
@@ -72,7 +74,8 @@ export class CustomNesEndpoint extends ChatEndpoint {
 			configurationService,
 			experimentationService,
 			chatWebSocketService,
-			logService
+			logService,
+			rateLimitSimulationService,
 		);
 	}
 

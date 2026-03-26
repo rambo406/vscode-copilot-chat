@@ -19,6 +19,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
+import { IRateLimitSimulationService } from '../common/rateLimitSimulationService';
 import { ChatEndpoint } from './chatEndpoint';
 import { getInstantApplyModel } from './proxyModelHelper';
 
@@ -38,6 +39,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService,
 		@IProxyModelsService proxyModelsService: IProxyModelsService,
+		@IRateLimitSimulationService rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		const model = getInstantApplyModel(
 			configurationService,
@@ -73,7 +75,8 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 			configurationService,
 			experimentationService,
 			chatWebSocketService,
-			logService
+			logService,
+			rateLimitSimulationService,
 		);
 	}
 

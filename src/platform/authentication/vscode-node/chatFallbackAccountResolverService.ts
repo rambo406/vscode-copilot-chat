@@ -72,21 +72,35 @@ export class ChatFallbackAccountResolverService implements IChatFallbackAccountR
 		const attemptedAccountIdSet = new Set(attemptedAccountIds);
 		const availableAccounts = new Map((await authentication.getAccounts(authProviderId(this._configurationService))).map(account => [account.id, account]));
 
+		this._logService.info(
+			`[FallbackAccountResolver] resolveNextEligibleFallbackSession: ${configuredAccounts.length} configured account(s),`
+			+ ` currentAccount=${currentAccount?.id ?? 'none'}, attemptedIds=[${attemptedAccountIds.join(', ')}],`
+			+ ` availableAuthAccounts=${availableAccounts.size}`,
+		);
+
 		for (const registryEntry of configuredAccounts) {
-			if (attemptedAccountIdSet.has(registryEntry.id) || currentAccount?.id === registryEntry.id) {
+			if (attemptedAccountIdSet.has(registryEntry.id)) {
+				this._logService.info(`[FallbackAccountResolver] Skipping account ${registryEntry.id} (${registryEntry.label}): already attempted`);
+				continue;
+			}
+			if (currentAccount?.id === registryEntry.id) {
+				this._logService.info(`[FallbackAccountResolver] Skipping account ${registryEntry.id} (${registryEntry.label}): is current account`);
 				continue;
 			}
 
 			const availableAccount = availableAccounts.get(registryEntry.id);
 			if (!availableAccount) {
+				this._logService.info(`[FallbackAccountResolver] Skipping account ${registryEntry.id} (${registryEntry.label}): not authenticated / no matching auth account`);
 				continue;
 			}
 
 			const session = await getAnyAuthSession(this._configurationService, { silent: true, account: availableAccount });
 			if (!session) {
+				this._logService.info(`[FallbackAccountResolver] Skipping account ${registryEntry.id} (${registryEntry.label}): no session available`);
 				continue;
 			}
 
+			this._logService.info(`[FallbackAccountResolver] Found eligible fallback account: ${registryEntry.id} (${registryEntry.label})`);
 			return {
 				account: this.toAccount(session.account),
 				registryEntry,
@@ -94,6 +108,7 @@ export class ChatFallbackAccountResolverService implements IChatFallbackAccountR
 			};
 		}
 
+		this._logService.info('[FallbackAccountResolver] No eligible fallback account found');
 		return undefined;
 	}
 

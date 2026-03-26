@@ -18,6 +18,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
+import { IRateLimitSimulationService } from '../common/rateLimitSimulationService';
 import { ChatEndpoint } from './chatEndpoint';
 import { CopilotChatEndpoint } from './copilotChatEndpoint';
 
@@ -46,6 +47,7 @@ export class AutoChatEndpoint extends CopilotChatEndpoint {
 		@IExperimentationService _expService: IExperimentationService,
 		@IChatWebSocketManager _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService,
+		@IRateLimitSimulationService _rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		super(
 			calculateAutoModelInfo(_wrappedEndpoint, _sessionToken, _discountPercent),
@@ -61,7 +63,8 @@ export class AutoChatEndpoint extends CopilotChatEndpoint {
 			_configurationService,
 			_expService,
 			_chatWebSocketService,
-			_logService
+			_logService,
+			_rateLimitSimulationService,
 		);
 	}
 }

@@ -8,6 +8,7 @@ import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/comm
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { IRateLimitSimulationService } from '../../../platform/endpoint/common/rateLimitSimulationService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
@@ -122,7 +123,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
 		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
-		@ILogService protected logService: ILogService
+		@ILogService protected logService: ILogService,
+		@IRateLimitSimulationService rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		super(
 			_modelMetadata,
@@ -133,7 +135,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			configurationService,
 			expService,
 			chatWebSocketService,
-			logService
+			logService,
+			rateLimitSimulationService,
 		);
 		this._customHeaders = this._sanitizeCustomHeaders(_modelMetadata.requestHeaders);
 	}

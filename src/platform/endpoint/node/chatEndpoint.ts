@@ -33,6 +33,7 @@ import { ICAPIClientService } from '../common/capiClient';
 import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
+import { IRateLimitSimulationService } from '../common/rateLimitSimulationService';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
@@ -147,6 +148,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IChatWebSocketManager private readonly _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService,
+		@IRateLimitSimulationService private readonly _rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		// This metadata should always be present, but if not we will default to 8192 tokens
 		this._maxTokens = modelMetadata.capabilities.limits?.max_prompt_tokens ?? 8192;
@@ -396,6 +398,11 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		const simulatedError = this._rateLimitSimulationService.consume();
+		if (simulatedError) {
+			return simulatedError;
+		}
+
 		const useWebSocket = options.useWebSocket ?? !!(
 			options.turnId
 			&& options.conversationId
@@ -476,7 +483,8 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		@IConfigurationService configService: IConfigurationService,
 		@IExperimentationService experimentService: IExperimentationService,
 		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
-		@ILogService logService: ILogService
+		@ILogService logService: ILogService,
+		@IRateLimitSimulationService rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		super(
 			modelMetadata,
@@ -487,7 +495,8 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 			configService,
 			experimentService,
 			chatWebSocketService,
-			logService
+			logService,
+			rateLimitSimulationService,
 		);
 	}
 

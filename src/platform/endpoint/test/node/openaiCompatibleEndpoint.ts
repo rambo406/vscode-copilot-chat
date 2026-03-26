@@ -22,6 +22,7 @@ import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../common/endpointProvider';
+import { IRateLimitSimulationService } from '../../common/rateLimitSimulationService';
 import { ChatEndpoint } from '../../node/chatEndpoint';
 
 export type IModelConfig = {
@@ -90,7 +91,8 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
-		@ILogService logService: ILogService
+		@ILogService logService: ILogService,
+		@IRateLimitSimulationService rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: modelConfig.id,
@@ -132,7 +134,8 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			configurationService,
 			experimentationService,
 			chatWebSocketService,
-			logService
+			logService,
+			rateLimitSimulationService,
 		);
 	}
 

@@ -18,6 +18,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IRateLimitSimulationService } from '../../endpoint/common/rateLimitSimulationService';
 
 
 export class XtabEndpoint extends ChatEndpoint {
@@ -63,7 +64,8 @@ export class XtabEndpoint extends ChatEndpoint {
 		@IInstantiationService _instantiationService: IInstantiationService,
 		@IExperimentationService _experimentationService: IExperimentationService,
 		@IChatWebSocketManager _chatWebSocketService: IChatWebSocketManager,
-		@ILogService _logService: ILogService
+		@ILogService _logService: ILogService,
+		@IRateLimitSimulationService _rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		const chatModelInfo = _configuredModelName ? { ...XtabEndpoint.chatModelInfo, id: _configuredModelName } : XtabEndpoint.chatModelInfo;
 		super(
@@ -75,7 +77,8 @@ export class XtabEndpoint extends ChatEndpoint {
 			_configService,
 			_experimentationService,
 			_chatWebSocketService,
-			_logService
+			_logService,
+			_rateLimitSimulationService,
 		);
 	}
 

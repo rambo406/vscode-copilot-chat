@@ -18,6 +18,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
+import { IRateLimitSimulationService } from '../common/rateLimitSimulationService';
 import { ChatEndpoint } from './chatEndpoint';
 
 export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
@@ -36,6 +37,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService,
+		@IRateLimitSimulationService rateLimitSimulationService: IRateLimitSimulationService,
 	) {
 		const model = modelName;
 		const modelInfo: IChatModelInformation = {
@@ -66,7 +68,8 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 			configurationService,
 			experimentationService,
 			chatWebSocketService,
-			logService
+			logService,
+			rateLimitSimulationService,
 		);
 	}
 

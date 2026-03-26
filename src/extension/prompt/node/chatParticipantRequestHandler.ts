@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Location } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IChatFallbackAccountResolverService } from '../../../platform/authentication/common/chatFallbackAccountResolver';
 import { getChatParticipantNameFromId } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -29,6 +30,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseTurn, ChatLocation as VSChatLocation } from '../../../vscodeTypes';
 import { ICommandService } from '../../commands/node/commandService';
 import { getAgentForIntent, Intent } from '../../common/constants';
+import { retryWithFallbackAccount } from '../../conversation/node/fallbackAccountRetry';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
 import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
@@ -36,6 +38,7 @@ import { ContributedToolName } from '../../tools/common/toolNames';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, getGlobalContextCacheKey, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
 import { InternalToolReference } from '../common/intents';
+import { IContinueOnErrorConfirmation, isContinueOnError } from '../common/specialRequestTypes';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from './defaultIntentRequestHandler';
 import { IDocumentContext } from './documentContext';
@@ -89,6 +92,7 @@ export class ChatParticipantRequestHandler {
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
+		@IChatFallbackAccountResolverService private readonly _fallbackAccountResolverService: IChatFallbackAccountResolverService,
 	) {
 		this.location = this.getLocation(request);
 
@@ -288,6 +292,35 @@ export class ChatParticipantRequestHandler {
 				}
 			} satisfies ICopilotChatResult, true);
 
+			// Auto-retry with fallback account when rate-limited
+			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackAccount
+				&& result.errorDetails
+				&& !result.errorDetails.responseIsFiltered) {
+				const retryAsContinuation = async (retryRequest: ChatRequest) => {
+					const retrySeedConversation = this.conversation;
+					const continuationRequest = this.createContinuationRetryRequest(retryRequest);
+					const retryHandler = this._instantiationService.createInstance(
+						ChatParticipantRequestHandler, this.rawHistory, continuationRequest, this.stream,
+						this.token, this.chatAgentArgs, this.yieldRequested,
+						{ telemetryMessageId: this.chatTelemetry.telemetryMessageId, seedConversation: retrySeedConversation }
+					);
+					const retryResult = await retryHandler.getResult();
+					return { request: continuationRequest, result: retryResult };
+				};
+
+				const fallbackResult = await retryWithFallbackAccount({
+					authenticationService: this._authService,
+					resolverService: this._fallbackAccountResolverService,
+					logService: this._logService,
+					request: this.request,
+					result,
+					stream: this.stream,
+					retryAsContinuation,
+				});
+				this.request = fallbackResult.request;
+				result = fallbackResult.result;
+			}
+
 			return <ICopilotChatResult>result;
 
 		} catch (err) {
@@ -334,6 +367,21 @@ export class ChatParticipantRequestHandler {
 			this.turn.setResponse(TurnStatus.Error, { type: 'meta', message }, undefined, chatResult);
 			return chatResult;
 		}
+	}
+
+	private createContinuationRetryRequest(request: ChatRequest): ChatRequest {
+		if (isContinueOnError(request)) {
+			return request;
+		}
+
+		return {
+			...request,
+			prompt: l10n.t('Try Again'),
+			acceptedConfirmationData: [
+				...(request.acceptedConfirmationData ?? []),
+				{ copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation,
+			],
+		};
 	}
 }
 

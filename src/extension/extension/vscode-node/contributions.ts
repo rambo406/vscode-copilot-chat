@@ -22,6 +22,7 @@ import { LanguageModelAccess } from '../../conversation/vscode-node/languageMode
 import { LogWorkspaceStateContribution } from '../../conversation/vscode-node/logWorkspaceState';
 import { RemoteAgentContribution } from '../../conversation/vscode-node/remoteAgents';
 import { DiagnosticsContextContribution } from '../../diagnosticsContext/vscode/diagnosticsContextProvider';
+import { RateLimitSimulationContribution } from '../../endpoint/vscode-node/rateLimitSimulation.contribution';
 import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmProxyContrib';
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
@@ -78,6 +79,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ContextKeysContribution),
 	asContributionFactory(CopilotDebugCommandContribution),
 	asContributionFactory(DebugCommandsContribution),
+	asContributionFactory(RateLimitSimulationContribution),
 	asContributionFactory(LanguageModelAccess),
 	asContributionFactory(WalkthroughCommandContribution),
 	asContributionFactory(JointCompletionsProviderContribution),

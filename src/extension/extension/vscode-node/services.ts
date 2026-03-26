@@ -27,6 +27,7 @@ import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IRateLimitSimulationService, RateLimitSimulationService } from '../../../platform/endpoint/common/rateLimitSimulationService';
 import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
@@ -170,6 +171,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	builder.define(IFetcherService, new SyncDescriptor(FetcherService, [undefined]));
 	builder.define(IDomainService, new SyncDescriptor(DomainService));
+	builder.define(IRateLimitSimulationService, new SyncDescriptor(RateLimitSimulationService));
 	builder.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
 	builder.define(IImageService, new SyncDescriptor(VSCodeImageServiceImpl));
 

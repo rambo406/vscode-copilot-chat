@@ -23,6 +23,7 @@ import { IChatWebSocketManager } from '../../../networking/node/chatWebSocketMan
 import { NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
+import { IRateLimitSimulationService } from '../../common/rateLimitSimulationService';
 import { ChatEndpoint } from '../chatEndpoint';
 import { CopilotChatEndpoint } from '../copilotChatEndpoint';
 
@@ -71,7 +72,8 @@ const createMockServices = () => ({
 	configurationService: new InMemoryConfigurationService(new DefaultsOnlyConfigurationService()),
 	expService: new NullExperimentationService(),
 	chatWebSocketService: {} as IChatWebSocketManager,
-	logService: {} as ILogService
+	logService: {} as ILogService,
+	rateLimitSimulationService: { consume: () => undefined, isArmed: () => false, arm: () => { }, disarm: () => { }, onDidChangeArmedState: () => ({ dispose: () => { } }) } as unknown as IRateLimitSimulationService,
 });
 
 const createAnthropicModelMetadata = (family: string, maxOutputTokens: number = 4096): IChatModelInformation => ({
@@ -181,7 +183,8 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const thinkingMessage = createThinkingMessage('copilot-thinking-abc', 'copilot reasoning process');
@@ -211,7 +214,8 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const userMessage: Raw.ChatMessage = {
@@ -251,7 +255,8 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const regularMessage: Raw.ChatMessage = {
@@ -293,7 +298,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -316,7 +322,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -338,7 +345,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -361,7 +369,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -384,7 +393,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -407,7 +417,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = createTestOptions([createUserMessage('Hello')]);
@@ -429,7 +440,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = createTestOptions([createUserMessage('Hello')]);
@@ -452,7 +464,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -477,7 +490,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -499,7 +513,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = createTestOptions([createUserMessage('Hello')]);
@@ -521,7 +536,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -543,7 +559,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -565,7 +582,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
@@ -587,7 +605,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = {
@@ -612,7 +631,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const options = {
@@ -637,7 +657,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			// Test Panel location
@@ -694,7 +715,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			// Verify Agent location sets thinking_budget
@@ -764,7 +786,8 @@ describe('ChatEndpoint - Image Count Validation', () => {
 			mockServices.configurationService,
 			mockServices.expService,
 			mockServices.chatWebSocketService,
-			mockServices.logService
+			mockServices.logService,
+			mockServices.rateLimitSimulationService
 		);
 
 		// Create 3 messages each with 1 image (total 3 images)
@@ -785,7 +808,8 @@ describe('ChatEndpoint - Image Count Validation', () => {
 			mockServices.configurationService,
 			mockServices.expService,
 			mockServices.chatWebSocketService,
-			mockServices.logService
+			mockServices.logService,
+			mockServices.rateLimitSimulationService
 		);
 
 		// Create 2 messages each with 1 image (total 2 images)

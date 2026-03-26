@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatRequest } from 'vscode';
-import * as vscode from 'vscode';
+import * as l10n from '@vscode/l10n';
+import type { AuthenticationSessionAccountInformation, ChatRequest, ChatResponseStream, ChatResult } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatFallbackAccountResolverService } from '../../../platform/authentication/common/chatFallbackAccountResolver';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -16,12 +16,12 @@ export interface IFallbackAccountRetryOptions {
 	readonly resolverService: IChatFallbackAccountResolverService;
 	readonly logService?: ILogService;
 	readonly request: ChatRequest;
-	readonly result: vscode.ChatResult;
-	readonly stream: vscode.ChatResponseStream;
-	retryAsContinuation(retryRequest: ChatRequest): Promise<{ request: ChatRequest; result: vscode.ChatResult }>;
+	readonly result: ChatResult;
+	readonly stream: ChatResponseStream;
+	retryAsContinuation(retryRequest: ChatRequest): Promise<{ request: ChatRequest; result: ChatResult }>;
 }
 
-export async function retryWithFallbackAccount(options: IFallbackAccountRetryOptions): Promise<{ request: ChatRequest; result: vscode.ChatResult }> {
+export async function retryWithFallbackAccount(options: IFallbackAccountRetryOptions): Promise<{ request: ChatRequest; result: ChatResult }> {
 	const log = options.logService;
 	log?.info('[FallbackAccountRetry] retryWithFallbackAccount called');
 
@@ -74,11 +74,11 @@ export async function retryWithFallbackAccount(options: IFallbackAccountRetryOpt
 		try {
 			await options.authenticationService.getCopilotToken(true);
 		} catch {
-			options.stream.warning(new vscode.MarkdownString(vscode.l10n.t('Configured fallback GitHub account {0} could not be used for Copilot Chat. Trying the next configured fallback account.', resolvedSession.registryEntry.label)));
+			options.stream.warning(l10n.t('Configured fallback GitHub account {0} could not be used for Copilot Chat. Trying the next configured fallback account.', resolvedSession.registryEntry.label));
 			continue;
 		}
 
-		options.stream.warning(new vscode.MarkdownString(vscode.l10n.t('Your current Copilot Chat account was rate-limited. Retrying with fallback GitHub account {0}.', resolvedSession.registryEntry.label)));
+		options.stream.warning(l10n.t('Your current Copilot Chat account was rate-limited. Retrying with fallback GitHub account {0}.', resolvedSession.registryEntry.label));
 		({ request, result } = await options.retryAsContinuation(request));
 		(result as ICopilotChatResultIn).metadata ??= {};
 		(result as ICopilotChatResultIn).metadata!.attemptedFallbackAccountIds = attemptedAccountIds;
@@ -99,7 +99,7 @@ export async function retryWithFallbackAccount(options: IFallbackAccountRetryOpt
 	return { request, result };
 }
 
-function withFallbackAccountRetryContext(request: ChatRequest, attemptedAccountIds: readonly string[], originalActiveAccount: vscode.AuthenticationSessionAccountInformation | undefined): ChatRequest {
+function withFallbackAccountRetryContext(request: ChatRequest, attemptedAccountIds: readonly string[], originalActiveAccount: AuthenticationSessionAccountInformation | undefined): ChatRequest {
 	const retryContext: IFallbackAccountRetryContext = {
 		copilotFallbackAccountRetry: true,
 		attemptedAccountIds,

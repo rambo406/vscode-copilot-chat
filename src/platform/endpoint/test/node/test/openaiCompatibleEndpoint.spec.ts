@@ -20,6 +20,7 @@ import { IExperimentationService } from '../../../../../platform/telemetry/commo
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IRateLimitSimulationService } from '../../../common/rateLimitSimulationService';
 import { IModelConfig, OpenAICompatibleTestEndpoint } from '../openaiCompatibleEndpoint';
 
 // Test fixtures for thinking content
@@ -66,7 +67,8 @@ const createMockServices = () => ({
 	} as unknown as IConfigurationService,
 	expService: {} as IExperimentationService,
 	chatWebSocketService: {} as IChatWebSocketManager,
-	logService: {} as ILogService
+	logService: {} as ILogService,
+	rateLimitSimulationService: { consume: () => undefined, isArmed: () => false, arm: () => { }, disarm: () => { }, onDidChangeArmedState: () => ({ dispose: () => { } }) } as unknown as IRateLimitSimulationService,
 });
 
 describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
@@ -125,7 +127,8 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const thinkingMessage = createThinkingMessage('openai-compat-123', 'openai compatible reasoning');
@@ -155,7 +158,8 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const userMessage: Raw.ChatMessage = {
@@ -195,7 +199,8 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const regularMessage: Raw.ChatMessage = {
@@ -239,7 +244,8 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.configurationService,
 				mockServices.expService,
 				mockServices.chatWebSocketService,
-				mockServices.logService
+				mockServices.logService,
+				mockServices.rateLimitSimulationService
 			);
 
 			const thinkingMessage = createThinkingMessage('azure-thinking-789', 'azure reasoning process');
