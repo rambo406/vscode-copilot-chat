@@ -34,6 +34,8 @@ export interface ISearchSubagentToolCallingLoopOptions extends IToolCallingLoopO
 	promptText: string;
 	/** Optional pre-generated subagent invocation ID. If not provided, a new UUID will be generated. */
 	subAgentInvocationId?: string;
+	/** Per-invocation model override. When set, this model is used instead of the configured default. */
+	modelOverride?: string;
 }
 
 export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubagentToolCallingLoopOptions> {
@@ -79,6 +81,16 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	 * Get the endpoint to use for the search subagent
 	 */
 	private async getEndpoint() {
+		// Per-invocation model override takes highest priority
+		if (this.options.modelOverride) {
+			try {
+				const endpoint = await this.endpointProvider.getChatEndpoint(this.options.modelOverride as ChatEndpointFamily);
+				return endpoint;
+			} catch {
+				this._logService.trace(`[SearchSubagentToolCallingLoop] Model override '${this.options.modelOverride}' is not available, falling back to default model`);
+			}
+		}
+
 		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
 		const useAgenticProxy = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy, this._experimentationService);
 

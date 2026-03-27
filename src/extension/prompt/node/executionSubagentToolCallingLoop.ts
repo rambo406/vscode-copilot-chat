@@ -33,6 +33,8 @@ export interface IExecutionSubagentToolCallingLoopOptions extends IToolCallingLo
 	promptText: string;
 	/** Optional pre-generated subagent invocation ID. If not provided, a new UUID will be generated. */
 	subAgentInvocationId?: string;
+	/** Per-invocation model override. When set, this model is used instead of the configured default. */
+	modelOverride?: string;
 }
 
 export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<IExecutionSubagentToolCallingLoopOptions> {
@@ -76,6 +78,20 @@ export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<IExecution
 	 * Get the endpoint to use for the execution subagent
 	 */
 	private async getEndpoint() {
+		// Per-invocation model override takes highest priority
+		if (this.options.modelOverride) {
+			try {
+				const endpoint = await this.endpointProvider.getChatEndpoint(this.options.modelOverride as ChatEndpointFamily);
+				if (!endpoint.supportsToolCalls) {
+					this._logService.trace(`[ExecutionSubagentToolCallingLoop] Model override '${this.options.modelOverride}' does not support tool calls, falling back to default model`);
+				} else {
+					return endpoint;
+				}
+			} catch {
+				this._logService.trace(`[ExecutionSubagentToolCallingLoop] Model override '${this.options.modelOverride}' is not available, falling back to default model`);
+			}
+		}
+
 		const modelName = this._configurationService.getConfig(ConfigKey.Advanced.ExecutionSubagentModel) as ChatEndpointFamily;
 		if (modelName) {
 			try {

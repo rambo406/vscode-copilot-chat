@@ -26,6 +26,8 @@ export interface IExecutionSubagentParams {
 	query: string;
 	/** User-visible description shown while invoking */
 	description: string;
+	/** Optional model identifier to override the subagent's default model for this invocation */
+	model?: string;
 }
 
 class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
@@ -66,6 +68,7 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 			location: request.location,
 			promptText: options.input.query,
 			subAgentInvocationId: subAgentInvocationId,
+			modelOverride: options.input.model,
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(

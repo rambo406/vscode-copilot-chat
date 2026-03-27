@@ -68,7 +68,6 @@ export function buildConfigurationSchema(endpoint: IChatEndpoint, logService: IL
 
 	const hardcodedDefault = family.startsWith('claude') ? 'high' : 'medium';
 	const settingValue = configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride);
-	logService.info(`[ReasoningEffort] buildConfigurationSchema: family='${family}', effortLevels=[${effortLevels.join(', ')}], settingValue=${JSON.stringify(settingValue)}, hardcodedDefault='${hardcodedDefault}'`);
 	const { effort: defaultEffort } = resolveReasoningEffortDefault(settingValue, family, effortLevels, hardcodedDefault, logService);
 
 	return {
@@ -638,7 +637,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				const resolved = resolveReasoningEffortDefault(settingValue, family, effortLevels, hardcodedDefault, this._logService);
 				if (resolved.source !== 'hardcoded') {
 					if (dropdownEffort !== undefined && dropdownEffort !== resolved.effort) {
-						this._logService.info(`[ReasoningEffort] Setting override replaces dropdown value: '${dropdownEffort}' → '${resolved.effort}' (source: ${resolved.source})`);
+						this._logService.debug(`[ReasoningEffort] Setting override replaces dropdown value: '${dropdownEffort}' → '${resolved.effort}' (source: ${resolved.source})`);
 					}
 					effectiveReasoningEffort = resolved.effort;
 				}

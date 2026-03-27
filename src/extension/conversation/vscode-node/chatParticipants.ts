@@ -270,7 +270,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			}
 
 			// Auto-retry with a fallback model when the model rejects the current reasoning effort level
-			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel) {
+			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel && !request.subAgentInvocationId) {
 				const previousModelId = request.model?.id;
 				const switchedRequest = await this.switchToFallbackModel(request, stream);
 				if (switchedRequest.model?.id !== previousModelId) {
@@ -301,6 +301,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 			// Auto-retry with fallback model on first failure for retriable errors
 			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackModel
+				&& !request.subAgentInvocationId
 				&& result.errorDetails
 				&& !result.errorDetails.responseIsFiltered) {
 				const previousModelId = request.model?.id;

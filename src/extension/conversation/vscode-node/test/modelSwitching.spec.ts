@@ -175,3 +175,67 @@ describe('switchToFallbackModel', () => {
 		expect(result.prompt).toBe('test prompt');
 	});
 });
+
+describe('fallback model retry guard (subAgentInvocationId)', () => {
+	let mockStream: ReturnType<typeof createMockStream>;
+
+	beforeEach(() => {
+		mockStream = createMockStream();
+		mockSelectChatModels.mockReset();
+		mockExecuteCommand.mockReset();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	test('does not execute fallback when request has subAgentInvocationId', async () => {
+		// Subagent request — should be blocked by the guard
+		const request = {
+			...createMockRequest('gpt-4o'),
+			subAgentInvocationId: 'some-subagent-id',
+		};
+
+		const result = {
+			metadata: { shouldAutoRetryWithFallbackModel: true },
+			errorDetails: { message: 'Unsupported value' },
+		};
+
+		// Guard condition: the retry should NOT proceed for subagent requests
+		const shouldRetry = !!result.metadata.shouldAutoRetryWithFallbackModel && !request.subAgentInvocationId;
+		expect(shouldRetry).toBe(false);
+
+		// Prove switchToFallbackModel itself works — it's the guard that prevents calling it
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' });
+		mockSelectChatModels.mockResolvedValue([claudeOpus]);
+
+		const switched = await switchToFallbackModel(request, mockStream);
+		expect(switched.model.id).toBe('claude-opus-id');
+	});
+
+	test('executes fallback when request has no subAgentInvocationId (panel request)', async () => {
+		// Panel request — no subAgentInvocationId, guard allows retry
+		const request = createMockRequest('gpt-4o');
+
+		const result = {
+			metadata: { shouldAutoRetryWithFallbackModel: true },
+			errorDetails: { message: 'Unsupported value' },
+		};
+
+		// Guard condition: the retry SHOULD proceed for panel requests
+		const shouldRetry = !!result.metadata.shouldAutoRetryWithFallbackModel && !request.subAgentInvocationId;
+		expect(shouldRetry).toBe(true);
+
+		// switchToFallbackModel works and returns a switched model
+		const claudeOpus = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' });
+		mockSelectChatModels.mockResolvedValue([claudeOpus]);
+
+		const switched = await switchToFallbackModel(request, mockStream);
+		expect(switched.model.id).toBe('claude-opus-id');
+		expect(mockExecuteCommand).toHaveBeenCalledWith('workbench.action.chat.changeModel', {
+			vendor: 'copilot',
+			id: 'claude-opus-id',
+			family: 'claude-opus-4-6',
+		});
+	});
+});

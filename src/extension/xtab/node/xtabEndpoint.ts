@@ -9,6 +9,7 @@ import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../../platform/
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { IRateLimitSimulationService } from '../../../platform/endpoint/common/rateLimitSimulationService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -18,7 +19,6 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IRateLimitSimulationService } from '../../endpoint/common/rateLimitSimulationService';
 
 
 export class XtabEndpoint extends ChatEndpoint {

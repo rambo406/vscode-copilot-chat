@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { AuthenticationSession, AuthenticationSessionAccountInformation, ChatErrorDetails, ChatRequest, ChatResponseStream } from 'vscode';
+import type { AuthenticationSession, AuthenticationSessionAccountInformation, CancellationToken, ChatErrorDetails, ChatRequest, ChatResponseStream } from 'vscode';
 import type { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import type { ChatFallbackResolvedSession, IChatFallbackAccountResolverService } from '../../../../platform/authentication/common/chatFallbackAccountResolver';
 import type { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
@@ -132,16 +132,33 @@ function createRequest(): ChatRequest {
 function createStream(): ChatResponseStream {
 	return {
 		warning: vi.fn(),
+		progress: vi.fn(async (_message: string, task?: () => Promise<string | void>) => {
+			if (task) {
+				await task();
+			}
+		}),
 	} as unknown as ChatResponseStream;
+}
+
+function createToken(isCancelled = false): CancellationToken {
+	const listeners: Array<() => void> = [];
+	return {
+		isCancellationRequested: isCancelled,
+		onCancellationRequested: (listener: () => void) => {
+			listeners.push(listener);
+			return { dispose: () => { } };
+		},
+		_fire: () => { listeners.forEach(l => l()); },
+	} as any;
 }
 
 describe('retryWithFallbackAccount', () => {
 	let authenticationService: TestAuthenticationService;
-	let stream: ChatResponseStream & { warning: ReturnType<typeof vi.fn> };
+	let stream: ChatResponseStream & { warning: ReturnType<typeof vi.fn>; progress: ReturnType<typeof vi.fn> };
 
 	beforeEach(() => {
 		authenticationService = new TestAuthenticationService();
-		stream = createStream() as ChatResponseStream & { warning: ReturnType<typeof vi.fn> };
+		stream = createStream() as ChatResponseStream & { warning: ReturnType<typeof vi.fn>; progress: ReturnType<typeof vi.fn> };
 	});
 
 	test('retries with the next fallback account and keeps it active after success', async () => {
@@ -158,6 +175,7 @@ describe('retryWithFallbackAccount', () => {
 			request: createRequest(),
 			result: createRateLimitedResult(),
 			stream,
+			token: createToken(),
 			retryAsContinuation,
 		});
 
@@ -183,6 +201,7 @@ describe('retryWithFallbackAccount', () => {
 			request: createRequest(),
 			result: createRateLimitedResult(),
 			stream,
+			token: createToken(true),
 			retryAsContinuation,
 		});
 
@@ -206,6 +225,7 @@ describe('retryWithFallbackAccount', () => {
 			request: createRequest(),
 			result: originalResult,
 			stream,
+			token: createToken(true),
 			retryAsContinuation,
 		});
 
@@ -214,5 +234,171 @@ describe('retryWithFallbackAccount', () => {
 		expect(authenticationService.resetCopilotToken).toHaveBeenCalledOnce();
 		expect(resolverService.getActiveChatAccount()?.id).toBe('account-current');
 		expect(outcome.result).toBe(originalResult);
+	});
+
+	test('emits cooldown warning when all fallback accounts are exhausted', async () => {
+		const originalAccount = createAccount('account-current', 'Current Account');
+		const resolverService = new TestResolverService(originalAccount, [createResolvedSession('account-fallback', 'Fallback Account'), undefined]);
+		const retryAsContinuation = vi.fn(async (retryRequest: ChatRequest) => ({
+			request: retryRequest,
+			result: createRateLimitedResult('still rate limited'),
+		}));
+
+		await retryWithFallbackAccount({
+			authenticationService,
+			resolverService,
+			request: createRequest(),
+			result: createRateLimitedResult(),
+			stream,
+			token: createToken(true),
+			retryAsContinuation,
+		});
+
+		expect(stream.progress).toHaveBeenCalledWith(
+			expect.stringContaining('rate-limited'),
+			expect.any(Function),
+		);
+	});
+
+	test('emits cooldown warning when no fallback accounts are configured', async () => {
+		const originalAccount = createAccount('account-current', 'Current Account');
+		const resolverService = new TestResolverService(originalAccount, [undefined]);
+		const retryAsContinuation = vi.fn();
+
+		await retryWithFallbackAccount({
+			authenticationService,
+			resolverService,
+			request: createRequest(),
+			result: createRateLimitedResult(),
+			stream,
+			token: createToken(true),
+			retryAsContinuation,
+		});
+
+		expect(stream.progress).toHaveBeenCalledWith(
+			expect.stringContaining('rate-limited'),
+			expect.any(Function),
+		);
+	});
+
+	test('does not emit cooldown warning when fallback account succeeds', async () => {
+		const originalAccount = createAccount('account-current', 'Current Account');
+		const resolverService = new TestResolverService(originalAccount, [createResolvedSession('account-fallback', 'Fallback Account')]);
+		const retryAsContinuation = vi.fn(async (retryRequest: ChatRequest) => ({
+			request: retryRequest,
+			result: { metadata: {} },
+		}));
+
+		await retryWithFallbackAccount({
+			authenticationService,
+			resolverService,
+			request: createRequest(),
+			result: createRateLimitedResult(),
+			stream,
+			token: createToken(),
+			retryAsContinuation,
+		});
+
+		// stream.progress should not be called since the fallback account succeeded
+		expect(stream.progress).not.toHaveBeenCalled();
+	});
+
+	test('calls stream.progress() with task when all fallback accounts are exhausted', async () => {
+		const originalAccount = createAccount('account-current', 'Current Account');
+		const resolverService = new TestResolverService(originalAccount, [createResolvedSession('account-fallback', 'Fallback Account'), undefined]);
+		const retryAsContinuation = vi.fn(async (retryRequest: ChatRequest) => ({
+			request: retryRequest,
+			result: createRateLimitedResult('still rate limited'),
+		}));
+
+		await retryWithFallbackAccount({
+			authenticationService,
+			resolverService,
+			request: createRequest(),
+			result: createRateLimitedResult(),
+			stream,
+			token: createToken(true),
+			retryAsContinuation,
+		});
+
+		expect(stream.progress).toHaveBeenCalledWith(
+			expect.stringContaining('rate-limited'),
+			expect.any(Function),
+		);
+		const [message] = stream.progress.mock.calls[0];
+		expect(message).toContain('minutes');
+	});
+
+	test('auto-retries via retryAsContinuation after countdown expires', async () => {
+		vi.useFakeTimers();
+		try {
+			const originalAccount = createAccount('account-current', 'Current Account');
+			const resolverService = new TestResolverService(originalAccount, [createResolvedSession('account-fallback', 'Fallback Account'), undefined]);
+			const retryAsContinuation = vi.fn()
+				.mockImplementationOnce(async (retryRequest: ChatRequest) => ({
+					request: retryRequest,
+					result: createRateLimitedResult('still rate limited'),
+				}))
+				.mockImplementationOnce(async (retryRequest: ChatRequest) => ({
+					request: retryRequest,
+					result: { metadata: {} } as ICopilotChatResultIn,
+				}));
+
+			const token = createToken();
+			const testStream = createStream() as ChatResponseStream & { warning: ReturnType<typeof vi.fn>; progress: ReturnType<typeof vi.fn> };
+
+			const promise = retryWithFallbackAccount({
+				authenticationService,
+				resolverService,
+				request: createRequest(),
+				result: createRateLimitedResult(),
+				stream: testStream,
+				token,
+				retryAsContinuation,
+			});
+
+			await vi.advanceTimersByTimeAsync(1800 * 1000);
+
+			const outcome = await promise;
+
+			expect(retryAsContinuation).toHaveBeenCalledTimes(2);
+			expect(outcome.result.errorDetails).toBeUndefined();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test('aborts countdown without auto-retrying when token is cancelled', async () => {
+		vi.useFakeTimers();
+		try {
+			const originalAccount = createAccount('account-current', 'Current Account');
+			const resolverService = new TestResolverService(originalAccount, [undefined]);
+			const retryAsContinuation = vi.fn();
+
+			const token = createToken();
+			const testStream = createStream() as ChatResponseStream & { warning: ReturnType<typeof vi.fn>; progress: ReturnType<typeof vi.fn> };
+
+			const promise = retryWithFallbackAccount({
+				authenticationService,
+				resolverService,
+				request: createRequest(),
+				result: createRateLimitedResult(),
+				stream: testStream,
+				token,
+				retryAsContinuation,
+			});
+
+			await vi.advanceTimersByTimeAsync(0);
+
+			(token as any)._fire();
+			await vi.advanceTimersByTimeAsync(0);
+
+			const outcome = await promise;
+
+			expect(retryAsContinuation).not.toHaveBeenCalled();
+			expect(outcome.result.errorDetails?.message).toBe('rate limited');
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

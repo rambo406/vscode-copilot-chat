@@ -28,7 +28,6 @@ export function resolveReasoningEffortDefault(
 	logService?: ILogService,
 ): IResolvedReasoningEffortDefault {
 	if (settingValue === undefined || settingValue === null) {
-		logService?.debug(`[ReasoningEffort] No override configured for family '${family}', using hardcoded default '${hardcodedDefault}'`);
 		return { effort: hardcodedDefault === undefined || effortLevels.includes(hardcodedDefault) ? hardcodedDefault : undefined, source: 'hardcoded' };
 	}
 
@@ -54,22 +53,12 @@ export function resolveReasoningEffortDefault(
 	}
 
 	if (candidate !== undefined) {
-		if (!effortLevels.includes(candidate)) {
-			logService?.warn(`[ReasoningEffort] Configured effort '${candidate}' is not in model's supported levels (${effortLevels.join(', ')}) for family '${family}', but applying it anyway (source: per-family key '${matchedKey}')`);
-		} else {
-			logService?.info(`[ReasoningEffort] Override applied for family '${family}': effort='${candidate}' (source: per-family key '${matchedKey}')`);
-		}
 		return { effort: candidate, source: 'per-family' };
 	}
 
 	// Fall back to global default key
 	const globalDefault = normalized['default'];
 	if (globalDefault !== undefined) {
-		if (!effortLevels.includes(globalDefault)) {
-			logService?.warn(`[ReasoningEffort] Configured effort '${globalDefault}' is not in model's supported levels (${effortLevels.join(', ')}) for family '${family}', but applying it anyway (source: global default)`);
-		} else {
-			logService?.info(`[ReasoningEffort] Override applied for family '${family}': effort='${globalDefault}' (source: global default)`);
-		}
 		return { effort: globalDefault, source: 'global-default' };
 	}
 

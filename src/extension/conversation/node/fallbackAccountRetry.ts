@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import type { AuthenticationSessionAccountInformation, ChatRequest, ChatResponseStream, ChatResult } from 'vscode';
+import type { AuthenticationSessionAccountInformation, CancellationToken, ChatRequest, ChatResponseStream, ChatResult } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatFallbackAccountResolverService } from '../../../platform/authentication/common/chatFallbackAccountResolver';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -18,6 +18,7 @@ export interface IFallbackAccountRetryOptions {
 	readonly request: ChatRequest;
 	readonly result: ChatResult;
 	readonly stream: ChatResponseStream;
+	readonly token: CancellationToken;
 	retryAsContinuation(retryRequest: ChatRequest): Promise<{ request: ChatRequest; result: ChatResult }>;
 }
 
@@ -92,6 +93,42 @@ export async function retryWithFallbackAccount(options: IFallbackAccountRetryOpt
 	if (!didSucceedWithFallbackAccount) {
 		log?.info(`[FallbackAccountRetry] No fallback account succeeded after ${iteration} iteration(s) — restoring original account`);
 		await restoreActiveChatAccount();
+
+		const retryAfterSeconds = (result as ICopilotChatResultIn).metadata?.retryAfterSeconds;
+		const waitMs = ((typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0) ? retryAfterSeconds : 1800) * 1000;
+		const waitMinutes = Math.ceil(waitMs / 60_000);
+
+		log?.info(`[FallbackAccountRetry] Starting countdown auto-retry — waiting ${waitMs}ms (~${waitMinutes} min)`);
+
+		await new Promise<void>(resolve => {
+			options.stream.progress(
+				l10n.t('All fallback accounts were rate-limited. Auto-retrying in ~{0} minutes...', String(waitMinutes)),
+				async () => {
+					try {
+						await new Promise<void>((resolveTimer, rejectTimer) => {
+							const timer = setTimeout(resolveTimer, waitMs);
+							options.token.onCancellationRequested(() => {
+								clearTimeout(timer);
+								rejectTimer(new Error('cancelled'));
+							});
+							if (options.token.isCancellationRequested) {
+								clearTimeout(timer);
+								rejectTimer(new Error('cancelled'));
+							}
+						});
+
+						log?.info('[FallbackAccountRetry] Countdown expired — auto-retrying');
+						({ request, result } = await options.retryAsContinuation(request));
+						return l10n.t('Rate limit expired — retried automatically.');
+					} catch {
+						log?.info('[FallbackAccountRetry] Countdown aborted (cancelled or error)');
+						return undefined;
+					} finally {
+						resolve();
+					}
+				},
+			);
+		});
 	} else {
 		log?.info('[FallbackAccountRetry] Successfully retried with a fallback account');
 	}

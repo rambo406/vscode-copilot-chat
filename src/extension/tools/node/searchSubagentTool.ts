@@ -32,6 +32,8 @@ export interface ISearchSubagentParams {
 	description: string;
 	/** Detailed instructions regarding the search subagent's objective */
 	details: string;
+	/** Optional model identifier to override the subagent's default model for this invocation */
+	model?: string;
 }
 
 class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
@@ -76,6 +78,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			location: request.location,
 			promptText: options.input.query,
 			subAgentInvocationId: subAgentInvocationId,
+			modelOverride: options.input.model,
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(

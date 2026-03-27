@@ -522,6 +522,10 @@ export class DefaultIntentRequestHandler {
 				if (fetchResult.type === ChatFetchResponseType.RateLimited
 					&& shouldSignalFallbackAccountRetry(this._configurationService.getConfig(ConfigKey.RateLimitAutoRetryWithFallbackAccount), fetchResult)) {
 					metadataFragment.shouldAutoRetryWithFallbackAccount = true;
+					const retryAfterNum = typeof fetchResult.retryAfter === 'string' ? parseInt(fetchResult.retryAfter, 10) : fetchResult.retryAfter;
+					if (typeof retryAfterNum === 'number' && !isNaN(retryAfterNum) && retryAfterNum > 0) {
+						metadataFragment.retryAfterSeconds = retryAfterNum;
+					}
 				}
 				const chatResult = { errorDetails, metadata: metadataFragment };
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);

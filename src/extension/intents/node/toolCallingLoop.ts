@@ -1205,12 +1205,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		// Skip setting override if effort was explicitly downgraded by the auto-retry logic.
 		// This prevents the override from re-applying the unsupported effort value.
-		const skipReasoningEffortOverride = this.options.request.modelConfiguration?._skipReasoningEffortOverride === true;
+		const skipReasoningEffortOverride = this.options.request.modelConfiguration?._skipReasoningEffortOverride === true
+			|| !!this.options.request.subAgentInvocationId;
 
 		// Apply setting override: github.copilot.chat.reasoningEffort takes priority
 		// over the dropdown value
 		const effortLevels = endpoint.supportsReasoningEffort;
-		this._logService.info(`[ReasoningEffort DEBUG] dropdown='${reasoningEffort}', effortLevels=${JSON.stringify(effortLevels)}, family='${endpoint.family}', settingValue=${JSON.stringify(this._configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride))}`);
+		this._logService.debug(`[ReasoningEffort] dropdown='${reasoningEffort}', effortLevels=${JSON.stringify(effortLevels)}, family='${endpoint.family}', settingValue=${JSON.stringify(this._configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride))}`);
 		if (!skipReasoningEffortOverride && effortLevels && effortLevels.length > 0) {
 			const settingValue = this._configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortOverride);
 			if (settingValue !== undefined && settingValue !== null) {
@@ -1219,7 +1220,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				const resolved = resolveReasoningEffortDefault(settingValue, family, effortLevels, hardcodedDefault, this._logService);
 				if (resolved.source !== 'hardcoded') {
 					if (reasoningEffort !== undefined && reasoningEffort !== resolved.effort) {
-						this._logService.info(`[ReasoningEffort] Setting override replaces dropdown value: '${reasoningEffort}' → '${resolved.effort}' (source: ${resolved.source})`);
+						this._logService.debug(`[ReasoningEffort] Setting override replaces dropdown value: '${reasoningEffort}' → '${resolved.effort}' (source: ${resolved.source})`);
 					}
 					reasoningEffort = resolved.effort;
 				}

@@ -315,6 +315,7 @@ export class ChatParticipantRequestHandler {
 					request: this.request,
 					result,
 					stream: this.stream,
+					token: this.token,
 					retryAsContinuation,
 				});
 				this.request = fallbackResult.request;
