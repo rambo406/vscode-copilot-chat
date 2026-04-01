@@ -27,7 +27,7 @@ import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
-import { switchToFallbackModel } from './modelSwitching';
+import { applyFallbackModelRequest, findConfiguredFallbackModel, resolveReasoningEffortFallbackModelSetting } from './modelSwitching';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 
@@ -312,7 +312,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 					&& result.errorDetails
 					&& !result.errorDetails.responseIsFiltered) {
 					const previousModelId = request.model?.id;
-					const switchedRequest = await switchToFallbackModel(request, stream);
+					const switchedRequest = await this.switchToFallbackModel(request, stream);
 					if (switchedRequest.model?.id !== previousModelId) {
 						request = switchedRequest;
 						const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
@@ -376,25 +376,25 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 	}
 
 	private async switchToFallbackModel(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<ChatRequest> {
-		const fallbackSelector = this.configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortFallbackModel)?.trim();
-		if (!fallbackSelector) {
+		const fallbackSetting = resolveReasoningEffortFallbackModelSetting(this.configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortFallbackModel));
+		if (!fallbackSetting) {
 			return request;
 		}
 
 		const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
-		const fallbackModel = this.findConfiguredFallbackModel(allModels, fallbackSelector, request.model?.id);
+		const fallbackModel = findConfiguredFallbackModel(allModels, fallbackSetting.modelSelector, request.model?.id);
 		if (!fallbackModel) {
 			return request;
 		}
 
 		await vscode.commands.executeCommand('workbench.action.chat.changeModel', { vendor: fallbackModel.vendor, id: fallbackModel.id, family: fallbackModel.family });
 		const currentEffort = typeof request.modelConfiguration?.reasoningEffort === 'string' ? request.modelConfiguration.reasoningEffort : undefined;
-		request = {
-			...request,
-			model: fallbackModel,
-		};
+		request = applyFallbackModelRequest(request, fallbackModel, fallbackSetting.reasoningEffort);
+		const retriedEffort = typeof request.modelConfiguration?.reasoningEffort === 'string' ? request.modelConfiguration.reasoningEffort : undefined;
 		stream.warning(new vscode.MarkdownString(
-			vscode.l10n.t("Reasoning effort ''{0}'' is not supported by the current model. Retrying with {1}...", currentEffort ?? 'unknown', fallbackModel.name ?? fallbackModel.family)
+			retriedEffort && retriedEffort !== currentEffort
+				? vscode.l10n.t("Reasoning effort ''{0}'' is not supported by the current model. Retrying with {1} at ''{2}''...", currentEffort ?? 'unknown', fallbackModel.name ?? fallbackModel.family, retriedEffort)
+				: vscode.l10n.t("Reasoning effort ''{0}'' is not supported by the current model. Retrying with {1}...", currentEffort ?? 'unknown', fallbackModel.name ?? fallbackModel.family)
 		));
 		return request;
 	}
@@ -412,49 +412,6 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				{ copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation,
 			],
 		};
-	}
-
-	private findConfiguredFallbackModel(models: readonly vscode.LanguageModelChat[], selector: string, currentModelId: string | undefined): vscode.LanguageModelChat | undefined {
-		const normalizedSelector = selector.trim().toLowerCase();
-		if (!normalizedSelector) {
-			return undefined;
-		}
-
-		const candidates = models
-			.filter(model => model.id !== currentModelId)
-			.map(model => ({ model, score: this.getFallbackModelMatchScore(model, normalizedSelector) }))
-			.filter((candidate): candidate is { model: vscode.LanguageModelChat; score: number } => candidate.score !== undefined)
-			.sort((a, b) => a.score - b.score);
-
-		return candidates[0]?.model;
-	}
-
-	private getFallbackModelMatchScore(model: vscode.LanguageModelChat, normalizedSelector: string): number | undefined {
-		const values = [model.family, model.id, model.name]
-			.filter((value): value is string => typeof value === 'string' && value.length > 0)
-			.map(value => value.toLowerCase());
-
-		let bestScore: number | undefined;
-		for (const value of values) {
-			let score: number | undefined;
-			if (value === normalizedSelector) {
-				score = 0;
-			} else if (value.startsWith(normalizedSelector)) {
-				score = 1;
-			} else if (normalizedSelector.startsWith(value)) {
-				score = 2;
-			} else if (value.includes(normalizedSelector)) {
-				score = 3;
-			} else if (normalizedSelector.includes(value)) {
-				score = 4;
-			}
-
-			if (score !== undefined && (bestScore === undefined || score < bestScore)) {
-				bestScore = score;
-			}
-		}
-
-		return bestScore;
 	}
 
 }

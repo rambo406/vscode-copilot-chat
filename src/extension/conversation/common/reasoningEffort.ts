@@ -39,14 +39,12 @@ export function resolveReasoningEffortDefault(
 	const familyLower = family.toLowerCase();
 
 	// Look up per-family key first (case-insensitive prefix match)
-	let matchedKey: string | undefined;
 	let candidate: string | undefined;
 	for (const key of Object.keys(normalized)) {
 		if (key === 'default') {
 			continue;
 		}
 		if (familyLower.startsWith(key.toLowerCase())) {
-			matchedKey = key;
 			candidate = normalized[key];
 			break;
 		}

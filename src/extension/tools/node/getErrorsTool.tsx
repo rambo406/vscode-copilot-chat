@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -21,7 +22,7 @@ import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { DiagnosticSeverity, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString, Range } from '../../../vscodeTypes';
+import { DiagnosticSeverity, ExtendedLanguageModelToolResult, FileType, LanguageModelPromptTsxPart, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -50,6 +51,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@INotebookService private readonly notebookService: INotebookService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -147,25 +149,27 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetErrorsParams>, token: CancellationToken) {
+		const requestedPaths = options.input.filePaths?.map((filePath, i) => {
+			const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
+			const range = options.input.ranges?.[i];
+
+			return { uri, range: range ? new Range(...range) : undefined };
+		});
+
 		const getAll = () => this.languageDiagnosticsService.getAllDiagnostics()
 			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning), inputUri: undefined }))
 			// filter any documents w/o warnings or errors
 			.filter(d => d.diagnostics.length > 0);
 
-		const getSome = (filePaths: string[]) =>
-			this.getDiagnostics(filePaths.map((filePath, i) => {
-				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
-				const range = options.input.ranges?.[i];
-				if (!uri) {
-					throw new Error(`Invalid input path ${filePath}`);
-				}
+		const getSome = () => this.getDiagnostics(requestedPaths ?? []);
 
-				return { uri, range: range ? new Range(...range) : undefined };
-			}));
-
-		const ds = options.input.filePaths?.length ? getSome(options.input.filePaths) : getAll();
+		const ds = requestedPaths?.length ? getSome() : getAll();
 
 		const diagnostics = coalesce(await Promise.all(ds.map((async ({ uri, diagnostics, inputUri }) => {
+			if (diagnostics.length === 0 && await this.isDirectory(uri)) {
+				return undefined;
+			}
+
 			try {
 				const document = await this.workspaceService.openTextDocumentAndSnapshot(uri);
 				checkCancellation(token);
@@ -190,15 +194,9 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 
 		const numDiagnostics = diagnostics.reduce((acc, { diagnostics }) => acc + diagnostics.length, 0);
 
-		// For display message, use inputUri if available (indicating file was found via folder input), otherwise use the file uri
-		// Deduplicate URIs since multiple files may have the same inputUri
-		const displayUriSet = new ResourceSet();
-		for (const d of diagnostics) {
-			const displayUri = d.inputUri ?? d.uri;
-			displayUriSet.add(displayUri);
-		}
-
-		const formattedURIs = this.formatURIs(Array.from(displayUriSet));
+		const formattedURIs = requestedPaths?.length
+			? this.formatURIs(this.dedupeUris(requestedPaths.map(path => path.uri)))
+			: this.formatURIs(this.dedupeUris(diagnostics.map(d => d.inputUri ?? d.uri)));
 
 		if (options.input.filePaths?.length) {
 			result.toolResultMessage = numDiagnostics === 0 ?
@@ -238,6 +236,24 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 
 	private formatURIs(uris: URI[]): string {
 		return uris.map(uri => formatUriForFileWidget(uri)).join(', ');
+	}
+
+	private dedupeUris(uris: URI[]): URI[] {
+		const uriSet = new ResourceSet();
+		for (const uri of uris) {
+			uriSet.add(uri);
+		}
+
+		return Array.from(uriSet);
+	}
+
+	private async isDirectory(uri: URI): Promise<boolean> {
+		try {
+			const stat = await this.fileSystemService.stat(uri);
+			return (stat.type & FileType.Directory) !== 0;
+		} catch {
+			return false;
+		}
 	}
 
 	private getNotebookCellDiagnostics(uri: URI) {

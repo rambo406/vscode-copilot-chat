@@ -22,7 +22,7 @@ vi.mock('vscode', () => ({
 	},
 }));
 
-import { switchToFallbackModel } from '../modelSwitching';
+import { applyFallbackModelRequest, findConfiguredFallbackModel, resolveReasoningEffortFallbackModelSetting, switchToFallbackModel } from '../modelSwitching';
 
 // --- Helpers ------------------------------------------------------------
 
@@ -58,6 +58,10 @@ function createChatModel(overrides: { id: string; family: string; name?: string 
 		name: overrides.name ?? overrides.id,
 		version: '',
 		maxInputTokens: 200_000,
+		capabilities: {
+			supportsToolCalling: true,
+			supportsImageToText: false,
+		},
 		countTokens: vi.fn(),
 		sendRequest: vi.fn(),
 	};
@@ -173,6 +177,69 @@ describe('switchToFallbackModel', () => {
 		const result = await switchToFallbackModel(request, mockStream);
 
 		expect(result.prompt).toBe('test prompt');
+	});
+});
+
+describe('resolveReasoningEffortFallbackModelSetting', () => {
+	test('returns selector for string shorthand', () => {
+		expect(resolveReasoningEffortFallbackModelSetting(' claude-opus-4 ')).toEqual({ modelSelector: 'claude-opus-4' });
+	});
+
+	test('returns selector and reasoning effort for object form', () => {
+		expect(resolveReasoningEffortFallbackModelSetting({ model: 'gpt-5.4', reasoningEffort: 'medium' })).toEqual({
+			modelSelector: 'gpt-5.4',
+			reasoningEffort: 'medium',
+		});
+	});
+
+	test('returns undefined when selector is empty', () => {
+		expect(resolveReasoningEffortFallbackModelSetting('   ')).toBeUndefined();
+		expect(resolveReasoningEffortFallbackModelSetting({ model: '   ', reasoningEffort: 'medium' })).toBeUndefined();
+	});
+});
+
+describe('findConfiguredFallbackModel', () => {
+	test('matches configured selector against family, id, and name', () => {
+		const models = [
+			createChatModel({ id: 'gpt-4o', family: 'gpt-4o', name: 'GPT-4o' }),
+			createChatModel({ id: 'gpt-5.4-id', family: 'gpt-5.4', name: 'GPT-5.4' }),
+			createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' }),
+		];
+
+		expect(findConfiguredFallbackModel(models, 'gpt-5.4', 'gpt-4o')?.id).toBe('gpt-5.4-id');
+		expect(findConfiguredFallbackModel(models, 'Claude Opus', 'gpt-4o')?.id).toBe('claude-opus-id');
+	});
+});
+
+describe('applyFallbackModelRequest', () => {
+	test('applies fallback reasoning effort and skip flag when provided', () => {
+		const request = createMockRequest('gpt-4o');
+		const fallbackModel = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' });
+
+		const result = applyFallbackModelRequest(request, fallbackModel, 'medium');
+
+		expect(result.model.id).toBe('claude-opus-id');
+		expect(result.modelConfiguration).toEqual({
+			reasoningEffort: 'medium',
+			_skipReasoningEffortOverride: true,
+		});
+	});
+
+	test('preserves existing request shape when no fallback reasoning effort is provided', () => {
+		const request = {
+			...createMockRequest('gpt-4o'),
+			modelConfiguration: {
+				reasoningEffort: 'high',
+			},
+		} as any;
+		const fallbackModel = createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' });
+
+		const result = applyFallbackModelRequest(request, fallbackModel);
+
+		expect(result.model.id).toBe('claude-opus-id');
+		expect(result.modelConfiguration).toEqual({
+			reasoningEffort: 'high',
+		});
 	});
 });
 

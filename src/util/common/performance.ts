@@ -9,25 +9,95 @@ interface IMonacoPerformanceMarks {
 	clearMarks(prefix: string): void;
 }
 
-function _getNativePolyfill(): IMonacoPerformanceMarks {
+type PartialMonacoPerformanceMarks = Partial<IMonacoPerformanceMarks>;
+
+function _getMonacoPerformanceMarksHost(): PartialMonacoPerformanceMarks | undefined {
+	return (globalThis as { MonacoPerformanceMarks?: PartialMonacoPerformanceMarks }).MonacoPerformanceMarks;
+}
+
+function _getNativeClearMark(): ((name?: string) => void) | undefined {
+	const nativePerformance = globalThis.performance;
+	if (typeof nativePerformance?.clearMarks !== 'function') {
+		return undefined;
+	}
+
+	return name => nativePerformance.clearMarks(name);
+}
+
+function _createInMemoryPolyfill(): IMonacoPerformanceMarks {
+	const marks: { name: string; startTime: number }[] = [];
+
 	return {
-		mark: (name, markOptions) => performance.mark(name, markOptions),
-		getMarks: () => performance.getEntries().filter(e => e.entryType === 'mark').map(e => ({ name: e.name, startTime: e.startTime })),
+		mark: (name, markOptions) => {
+			marks.push({ name, startTime: markOptions?.startTime ?? Date.now() });
+		},
+		getMarks: () => [...marks],
 		clearMarks: prefix => {
-			const toRemove = new Set<string>();
-			for (const entry of performance.getEntries()) {
-				if (entry.entryType === 'mark' && entry.name.startsWith(prefix)) {
-					toRemove.add(entry.name);
+			for (let i = marks.length - 1; i >= 0; i--) {
+				if (marks[i].name.startsWith(prefix)) {
+					marks.splice(i, 1);
 				}
-			}
-			for (const name of toRemove) {
-				performance.clearMarks(name);
 			}
 		},
 	};
 }
 
-const perf: IMonacoPerformanceMarks = (globalThis as { MonacoPerformanceMarks?: IMonacoPerformanceMarks }).MonacoPerformanceMarks ?? _getNativePolyfill();
+function _getNativePolyfill(): IMonacoPerformanceMarks {
+	const nativePerformance = globalThis.performance;
+	if (typeof nativePerformance?.mark !== 'function' || typeof nativePerformance.getEntries !== 'function') {
+		return _createInMemoryPolyfill();
+	}
+
+	const clearNativeMark = _getNativeClearMark();
+
+	return {
+		mark: (name, markOptions) => nativePerformance.mark(name, markOptions),
+		getMarks: () => nativePerformance.getEntries().filter(e => e.entryType === 'mark').map(e => ({ name: e.name, startTime: e.startTime })),
+		clearMarks: prefix => {
+			const toRemove = new Set<string>();
+			for (const entry of nativePerformance.getEntries()) {
+				if (entry.entryType === 'mark' && entry.name.startsWith(prefix)) {
+					toRemove.add(entry.name);
+				}
+			}
+			if (!clearNativeMark) {
+				return;
+			}
+			for (const name of toRemove) {
+				clearNativeMark(name);
+			}
+		},
+	};
+}
+
+function _createPerformanceMarks(): IMonacoPerformanceMarks {
+	const nativePerf = _getNativePolyfill();
+	const hostPerf = _getMonacoPerformanceMarksHost();
+	if (!hostPerf) {
+		return nativePerf;
+	}
+
+	const getMarks = hostPerf.getMarks?.bind(hostPerf) ?? nativePerf.getMarks;
+	const clearNativeMark = _getNativeClearMark();
+
+	return {
+		mark: hostPerf.mark?.bind(hostPerf) ?? nativePerf.mark,
+		getMarks,
+		clearMarks: hostPerf.clearMarks?.bind(hostPerf) ?? (prefix => {
+			if (!clearNativeMark) {
+				return;
+			}
+
+			for (const mark of getMarks()) {
+				if (mark.name.startsWith(prefix)) {
+					clearNativeMark(mark.name);
+				}
+			}
+		}),
+	};
+}
+
+const perf: IMonacoPerformanceMarks = _createPerformanceMarks();
 
 const chatExtPrefix = 'code/chat/ext/';
 

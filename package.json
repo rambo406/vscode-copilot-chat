@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.43.0",
+	"version": "0.43.1",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -3831,9 +3831,37 @@
 						]
 					},
 					"github.copilot.chat.reasoningEffortFallbackModel": {
-						"type": "string",
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "object",
+								"properties": {
+									"model": {
+										"type": "string",
+										"description": "Model selector to use when picking the fallback model."
+									},
+									"reasoningEffort": {
+										"type": "string",
+										"description": "Reasoning effort to apply when retrying on the fallback model.",
+										"enum": [
+											"none",
+											"low",
+											"medium",
+											"high",
+											"xhigh"
+										]
+									}
+								},
+								"required": [
+									"model"
+								],
+								"additionalProperties": false
+							}
+						],
 						"default": "claude-opus-4",
-						"markdownDescription": "Model selector to use when auto-retrying after the current model rejects a reasoning effort level. The first non-current model that exactly matches, starts with, or contains this value in its family, id, or display name is selected. Set to an empty string to disable fallback and downgrade effort instead.",
+						"markdownDescription": "Model selector to use when auto-retrying after the current model rejects a reasoning effort level. Accepts a plain string selector (for example, `\"claude-opus-4\"`) or an object like `{ \"model\": \"claude-opus-4\", \"reasoningEffort\": \"medium\" }`. The first non-current model that exactly matches, starts with, or contains the selector in its family, id, or display name is selected. Set the string to empty or omit `model` in the object form to disable fallback and downgrade effort instead.",
 						"tags": [
 							"advanced"
 						]

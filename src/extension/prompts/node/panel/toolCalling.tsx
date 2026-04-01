@@ -182,6 +182,14 @@ interface ToolResultOpts {
 
 const toolErrorSuffix = '\nPlease check your input and try again.';
 
+function getToolCallRecoveryHint(toolName: string | undefined, errorMessage: string): string {
+	if (toolName === ToolName.CoreRunInTerminal && /terminal was closed/i.test(errorMessage)) {
+		return '\nHint: Avoid using exit, quit, logout, or other shell-closing commands in terminal invocations. Let the command finish naturally and inspect the reported exit code instead.';
+	}
+
+	return '';
+}
+
 /**
  * Creates a <ToolResult /> element. Eagerly starts the tool call if we know
  * that the tool will not need/consume sizing information (e.g. MCP calls) and
@@ -295,7 +303,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
 					}
 				} catch (err) {
-					const errResult = toolCallErrorToResult(err);
+					const errResult = toolCallErrorToResult(err, props.toolCall.name);
 					toolResult = errResult.result;
 					isCancelled = errResult.isCancelled ?? false;
 					if (errResult.isCancelled) {
@@ -548,12 +556,13 @@ function textToolResult(text: string): LanguageModelToolResult {
 	return new LanguageModelToolResult([new LanguageModelTextPart(text)]);
 }
 
-export function toolCallErrorToResult(err: unknown) {
+export function toolCallErrorToResult(err: unknown, toolName?: string) {
 	if (isCancellationError(err)) {
 		return { result: textToolResult('The user cancelled the tool call.'), isCancelled: true };
 	} else {
 		const errorMessage = err instanceof Error ? err.message : String(err);
-		return { result: textToolResult(`ERROR while calling tool: ${errorMessage}${toolErrorSuffix}`) };
+		const recoveryHint = getToolCallRecoveryHint(toolName, errorMessage);
+		return { result: textToolResult(`ERROR while calling tool: ${errorMessage}${recoveryHint}${toolErrorSuffix}`) };
 	}
 }
 

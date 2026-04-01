@@ -611,8 +611,8 @@ export namespace ConfigKey {
 		export const OmitBaseAgentInstructions = defineAndMigrateSetting<boolean>('chat.advanced.omitBaseAgentInstructions', 'chat.omitBaseAgentInstructions', false);
 		/** Override the default reasoning effort level for models that support it. Accepts a string (global default) or an object with `default` and per-family keys. */
 		export const ReasoningEffortOverride = defineSetting<string | Record<string, string> | undefined>('chat.reasoningEffort', ConfigType.Simple, undefined);
-		/** Model selector to use when auto-retrying after a reasoning-effort rejection. Matches exact and prefix/fragment hits across model family, id, and display name. */
-		export const ReasoningEffortFallbackModel = defineSetting<string>('chat.reasoningEffortFallbackModel', ConfigType.Simple, 'claude-opus-4');
+		/** Model selector to use when auto-retrying after a reasoning-effort rejection. Accepts a string selector or an object with `model` and optional `reasoningEffort`. */
+		export const ReasoningEffortFallbackModel = defineSetting<string | { model: string; reasoningEffort?: string }>('chat.reasoningEffortFallbackModel', ConfigType.Simple, 'claude-opus-4');
 		export const CLIPlanExitModeEnabled = defineSetting<boolean>('chat.cli.planExitMode.enabled', ConfigType.Simple, false);
 		export const CLIForkSessionsEnabled = defineSetting<boolean>('chat.cli.forkSessions.enabled', ConfigType.Simple, false);
 		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', true);

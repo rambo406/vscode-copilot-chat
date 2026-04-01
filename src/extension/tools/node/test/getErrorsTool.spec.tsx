@@ -8,9 +8,11 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
+import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -22,16 +24,26 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { GetErrorsTool } from '../getErrorsTool';
 import { toolResultToString } from './toolTestUtils';
 
+class RecordingLogService extends TestLogService {
+	readonly errors: Array<{ error: string | Error; message?: string }> = [];
+
+	override error(error: string | Error, message?: string): void {
+		this.errors.push({ error, message });
+	}
+}
+
 // Test the GetErrorsTool functionality
 suite('GetErrorsTool - Tool Invocation', () => {
 	let accessor: ITestingServicesAccessor;
 	let collection: TestingServiceCollection;
 	let diagnosticsService: TestLanguageDiagnosticsService;
 	let fileSystemService: MockFileSystemService;
+	let logService: RecordingLogService;
 	let tool: GetErrorsTool;
 
 	const workspaceFolder = URI.file('/test/workspace');
 	const srcFolder = URI.file('/test/workspace/src');
+	const emptyFolder = URI.file('/test/workspace/empty-folder');
 	const tsFile1 = URI.file('/test/workspace/src/file1.ts');
 	const tsFile2 = URI.file('/test/workspace/src/file2.ts');
 	const jsFile = URI.file('/test/workspace/lib/file.js');
@@ -60,7 +72,10 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		// Set up file system service to mock directories
 		fileSystemService = new MockFileSystemService();
 		fileSystemService.mockDirectory(srcFolder, []);
+		fileSystemService.mockDirectory(emptyFolder, []);
 		collection.define(IFileSystemService, fileSystemService);
+		logService = new RecordingLogService();
+		collection.define(ILogService, logService);
 
 		accessor = collection.createTestingAccessor();
 
@@ -218,6 +233,19 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		const result = await tool.invoke({ input: { filePaths: [srcFolderPath] }, toolInvocationToken: null! }, CancellationToken.None);
 		const msg = await toolResultToString(accessor, result);
 		expect(msg).toMatchSnapshot();
+	});
+
+	test('Tool invocation - empty folder path reports cleanly without opening the directory', async () => {
+		const pathRep = accessor.get(IPromptPathRepresentationService);
+		const emptyFolderPath = pathRep.getFilePath(emptyFolder);
+		const result = await tool.invoke({ input: { filePaths: [emptyFolderPath] }, toolInvocationToken: null! }, CancellationToken.None);
+		const msg = await toolResultToString(accessor, result);
+		const toolResultMessage = typeof result.toolResultMessage === 'string' ? result.toolResultMessage : result.toolResultMessage?.value;
+
+		expect(msg).toBe('No errors found.');
+		expect(toolResultMessage).toContain('empty-folder');
+		expect(toolResultMessage).toContain('no problems found');
+		expect(logService.errors.map(entry => entry.message)).not.toContain('get_errors failed to open doc with diagnostics');
 	});
 
 	test('Tool invocation - with filePath and range filters diagnostics to that range', async () => {

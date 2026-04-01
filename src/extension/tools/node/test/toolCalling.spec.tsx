@@ -14,8 +14,9 @@ import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../vsco
 import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { ToolCallRound } from '../../../prompt/common/toolCallRound';
 import { PromptRenderer } from '../../../prompts/node/base/promptRenderer';
-import { ChatToolCalls, ChatToolCallsProps, ToolFailureEncountered, ToolResultMetadata } from '../../../prompts/node/panel/toolCalling';
+import { ChatToolCalls, ChatToolCallsProps, toolCallErrorToResult, ToolFailureEncountered, ToolResultMetadata } from '../../../prompts/node/panel/toolCalling';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
 import { TestToolsService } from './testToolsService';
 
@@ -136,6 +137,11 @@ suite('TestFailureTool', () => {
 		await doTest([
 			new ToolCallRound('I will run the tool', [{ id: '1', name: 'testTool', arguments: '{}' }], 0, 'id-8')
 		], {});
+	});
+
+	test('adds a recovery hint for terminal-closure errors', () => {
+		const result = toolCallErrorToResult(new Error('The terminal was closed'), ToolName.CoreRunInTerminal);
+		expect((result.result.content[0] as LanguageModelTextPart).value).toContain('Avoid using exit, quit, logout, or other shell-closing commands');
 	});
 });
 

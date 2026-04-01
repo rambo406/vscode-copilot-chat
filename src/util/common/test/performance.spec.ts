@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatExtPerfMark, clearChatExtMarks, getChatExtMarks, markChatExt } from '../performance';
 
 describe('performance', () => {
@@ -79,6 +79,38 @@ describe('performance', () => {
 			expect(marks).toHaveLength(0);
 			const remaining = getChatExtMarks().filter(m => m.name.startsWith(`${TEST_PREFIX}${sessionId2}/`));
 			expect(remaining).toHaveLength(1);
+		});
+	});
+
+	describe('MonacoPerformanceMarks compatibility', () => {
+		it('falls back when the host does not implement clearMarks', async () => {
+			const globalWithMonacoMarks = globalThis as typeof globalThis & { MonacoPerformanceMarks?: { mark(name: string, markOptions?: { startTime?: number }): void; getMarks(): { name: string; startTime: number }[] } };
+			const originalMonacoPerformanceMarks = globalWithMonacoMarks.MonacoPerformanceMarks;
+			const sessionId = `partial-host-${testCounter++}-${Date.now()}`;
+			const markName = `${TEST_PREFIX}${sessionId}/${ChatExtPerfMark.WillHandleParticipant}`;
+
+			try {
+				vi.resetModules();
+				globalWithMonacoMarks.MonacoPerformanceMarks = {
+					mark: (name, markOptions) => performance.mark(name, markOptions),
+					getMarks: () => performance.getEntries().filter(e => e.entryType === 'mark').map(e => ({ name: e.name, startTime: e.startTime })),
+				};
+
+				const performanceModule = await import('../performance');
+				performanceModule.markChatExt(sessionId, performanceModule.ChatExtPerfMark.WillHandleParticipant);
+
+				expect(performanceModule.getChatExtMarks().filter(m => m.name.startsWith(`${TEST_PREFIX}${sessionId}/`))).toHaveLength(1);
+				expect(() => performanceModule.clearChatExtMarks(sessionId)).not.toThrow();
+				expect(performanceModule.getChatExtMarks().filter(m => m.name.startsWith(`${TEST_PREFIX}${sessionId}/`))).toHaveLength(0);
+			} finally {
+				performance.clearMarks(markName);
+				if (originalMonacoPerformanceMarks) {
+					globalWithMonacoMarks.MonacoPerformanceMarks = originalMonacoPerformanceMarks;
+				} else {
+					delete globalWithMonacoMarks.MonacoPerformanceMarks;
+				}
+				vi.resetModules();
+			}
 		});
 	});
 });
