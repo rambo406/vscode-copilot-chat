@@ -22,7 +22,7 @@ import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../p
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, resolveWorkspaceOTelMetadata, StdAttr, truncateForOTel, workspaceMetadataToOTelAttributes } from '../../../platform/otel/common/index';
-import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
+import { IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -172,6 +172,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private stopHookReason: string | undefined;
 	private additionalHookContext: string | undefined;
 	private stopHookUserInitiated = false;
+	private agentSpan: ISpanHandle | undefined;
+	private chatSessionIdForTools: string | undefined;
+	private toolsAvailableEmitted = false;
 
 	public appendAdditionalHookContext(context: string): void {
 		if (!context) {
@@ -702,6 +705,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			?? (this.options.request as { participant?: string }).participant
 			?? 'GitHub Copilot Chat';
 
+		// Extract custom mode name for debug logging (kept separate from agentName to avoid metric cardinality)
+		const modeInstructions = (this.options.request as { modeInstructions2?: { name?: string; isBuiltin?: boolean } }).modeInstructions2;
+		const customModeName = modeInstructions?.name && !modeInstructions.isBuiltin ? modeInstructions.name : undefined;
+
 		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
 		// Try subAgentInvocationId first (unique per subagent, supports parallel), then request-level key
 		const subAgentInvocationId = this.options.request.subAgentInvocationId;
@@ -731,6 +738,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 					[CopilotChatAttr.SESSION_ID]: this.options.conversation.sessionId,
 					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+					...(customModeName ? { 'copilot_chat.mode_name': customModeName } : {}),
 					...workspaceMetadataToOTelAttributes(resolveWorkspaceOTelMetadata(this._gitService)),
 				},
 				parentTraceContext,
@@ -787,7 +795,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				});
 
 				try {
-					const result = await this._runLoop(outputStream, token);
+					const result = await this._runLoop(outputStream, token, span, chatSessionId);
 					span.setAttributes({
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
@@ -805,9 +813,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						}
 						// Log tool definitions once on the agent span (same set across all turns)
 						if (result.availableTools.length > 0) {
-							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, truncateForOTel(JSON.stringify(
+							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, JSON.stringify(
 								result.availableTools.map(t => ({ type: 'function', name: t.name, description: t.description }))
-							)));
+							));
 						}
 					}
 					span.setStatus(SpanStatusCode.OK);
@@ -829,12 +837,17 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		);
 	}
 
-	private async _runLoop(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
+	private async _runLoop(outputStream: ChatResponseStream | undefined, token: CancellationToken, agentSpan?: ISpanHandle, chatSessionId?: string): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
 		let stopHookActive = false;
 		const sessionId = this.options.conversation.sessionId;
+
+		// Store span context so runOne() can emit tools_available on first call
+		this.agentSpan = agentSpan;
+		this.chatSessionIdForTools = chatSessionId;
+		this.toolsAvailableEmitted = false;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -861,6 +874,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			try {
 				const turnId = String(i);
 				this._sessionTranscriptService.logAssistantTurnStart(sessionId, turnId);
+				agentSpan?.addEvent('turn_start', { turnId, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
 				this.resolveAutopilotProgress();
 				const result = await this.runOne(outputStream, i, token);
 				if (lastRequestMessagesStartingIndexForRun === undefined) {
@@ -873,6 +887,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
+				agentSpan?.addEvent('turn_end', { turnId, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
 
 				// If the model produced productive (non-task_complete) tool calls after being nudged,
 				// reset the stop hook flag and iteration count so it can be nudged again.
@@ -1098,6 +1113,17 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken): Promise<IToolCallSingleResult> {
 		let availableTools = await this.getAvailableTools(outputStream, token);
+
+		// Emit tools_available on the agent span once, before the first CHAT span
+		// starts in fetch(). This lets the debug logger write tools_*.json early.
+		if (!this.toolsAvailableEmitted && this.agentSpan && availableTools.length > 0) {
+			this.toolsAvailableEmitted = true;
+			this.agentSpan.addEvent('tools_available', {
+				toolDefinitions: JSON.stringify(availableTools.map(t => ({ type: 'function', name: t.name, description: t.description }))),
+				...(this.chatSessionIdForTools ? { [CopilotChatAttr.CHAT_SESSION_ID]: this.chatSessionIdForTools } : {}),
+			});
+		}
+
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillBuildPrompt);

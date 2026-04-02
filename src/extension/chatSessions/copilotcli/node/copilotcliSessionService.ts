@@ -62,7 +62,6 @@ export interface ICopilotCLISessionItem {
 	readonly status?: ChatSessionStatus;
 	readonly workingDirectory?: Uri;
 }
-
 export type ExtendedChatRequest = ChatRequest & { prompt: string };
 export type ISessionOptions = {
 	model?: string;
@@ -70,6 +69,7 @@ export type ISessionOptions = {
 	agent?: SweCustomAgent;
 	debugTargetSessionIds?: readonly string[];
 	mcpServerMappings?: McpServerMappings;
+	additionalWorkspaces?: IWorkspaceInfo[];
 }
 export type IGetSessionOptions = ISessionOptions & { sessionId: string };
 export type ICreateSessionOptions = ISessionOptions & { sessionId?: string };
@@ -993,7 +993,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private createCopilotSession(sdkSession: Session, workspaceInfo: IWorkspaceInfo, agentName: string | undefined, sessionManager: internal.LocalSessionManager): RefCountedSession {
-		const session = this.instantiationService.createInstance(CopilotCLISession, workspaceInfo, agentName, sdkSession);
+		const session = this.instantiationService.createInstance(CopilotCLISession, workspaceInfo, agentName, sdkSession, []);
 		this._debugFileLogger.startSession(session.sessionId).catch(err => {
 			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
 		});
@@ -1280,7 +1280,10 @@ async function copySessionFilesForForking(sessionId: string, targetSessionId: st
 				if (workspaceInfo.worktreeProperties) {
 					await _chatSessionMetadataStore.storeWorktreeInfo(targetSessionId, workspaceInfo.worktreeProperties);
 				} else if (workspaceInfo.folder) {
-					await _chatSessionMetadataStore.storeWorkspaceFolderInfo(targetSessionId, { folderPath: workspaceInfo.folder.fsPath, repositoryPath: workspaceInfo.repository?.fsPath, timestamp: Date.now() });
+					await _chatSessionMetadataStore.storeWorkspaceFolderInfo(targetSessionId, { folderPath: workspaceInfo.folder.fsPath, timestamp: Date.now() });
+					if (workspaceInfo.repositoryProperties) {
+						await _chatSessionMetadataStore.storeRepositoryProperties(targetSessionId, workspaceInfo.repositoryProperties);
+					}
 				}
 			})(),
 		]), token);
