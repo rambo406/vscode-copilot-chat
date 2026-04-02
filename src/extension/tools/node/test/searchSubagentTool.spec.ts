@@ -6,7 +6,9 @@
 import { expect, suite, test } from 'vitest';
 import { toolCategories, ToolCategory, ToolName } from '../../common/toolNames';
 import { ToolRegistry } from '../../common/toolsRegistry';
-// Ensure side-effect registration + type import
+// Ensure side-effect registration runs (type-only imports don't execute module)
+import '../searchSubagentTool';
+// eslint-disable-next-line no-duplicate-imports
 import { type ISearchSubagentParams } from '../searchSubagentTool';
 
 suite('SearchSubagentTool', () => {

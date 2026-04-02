@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.43.1",
+	"version": "0.43.4",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -3820,67 +3820,6 @@
 							"split"
 						]
 					},
-					"github.copilot.chat.reasoningEffort": {
-						"oneOf": [
-							{
-								"type": "string",
-								"description": "Global default reasoning effort level for all model families."
-							},
-							{
-								"type": "object",
-								"description": "Per-family reasoning effort overrides.",
-								"properties": {
-									"default": {
-										"type": "string",
-										"description": "Default reasoning effort applied to all families unless overridden."
-									}
-								},
-								"additionalProperties": {
-									"type": "string"
-								}
-							}
-						],
-						"markdownDescription": "Override the default reasoning effort level for the Thinking Effort dropdown. Accepts a plain string (e.g., `\"medium\"`) as a global default, or an object with `default` and per-family keys (e.g., `{ \"default\": \"medium\", \"claude\": \"high\" }`). Valid effort values include `none`, `low`, `medium`, `high`, and `xhigh`. Only applies to models that support reasoning effort.",
-						"tags": [
-							"advanced"
-						]
-					},
-					"github.copilot.chat.reasoningEffortFallbackModel": {
-						"oneOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "object",
-								"properties": {
-									"model": {
-										"type": "string",
-										"description": "Model selector to use when picking the fallback model."
-									},
-									"reasoningEffort": {
-										"type": "string",
-										"description": "Reasoning effort to apply when retrying on the fallback model.",
-										"enum": [
-											"none",
-											"low",
-											"medium",
-											"high",
-											"xhigh"
-										]
-									}
-								},
-								"required": [
-									"model"
-								],
-								"additionalProperties": false
-							}
-						],
-						"default": "claude-opus-4",
-						"markdownDescription": "Model selector to use when auto-retrying after the current model rejects a reasoning effort level. Accepts a plain string selector (for example, `\"claude-opus-4\"`) or an object like `{ \"model\": \"claude-opus-4\", \"reasoningEffort\": \"medium\" }`. The first non-current model that exactly matches, starts with, or contains the selector in its family, id, or display name is selected. Set the string to empty or omit `model` in the object form to disable fallback and downgrade effort instead.",
-						"tags": [
-							"advanced"
-						]
-					},
 					"github.copilot.chat.responsesApiReasoningSummary": {
 						"type": "string",
 						"default": "detailed",
@@ -4095,6 +4034,67 @@
 			{
 				"id": "advanced",
 				"properties": {
+					"github.copilot.chat.reasoningEffort": {
+						"oneOf": [
+							{
+								"type": "string",
+								"description": "Global default reasoning effort level for all model families."
+							},
+							{
+								"type": "object",
+								"description": "Per-family reasoning effort overrides.",
+								"properties": {
+									"default": {
+										"type": "string",
+										"description": "Default reasoning effort applied to all families unless overridden."
+									}
+								},
+								"additionalProperties": {
+									"type": "string"
+								}
+							}
+						],
+						"markdownDescription": "Override the default reasoning effort level for the Thinking Effort dropdown. Accepts a plain string (e.g., `\"medium\"`) as a global default, or an object with `default` and per-family keys (e.g., `{ \"default\": \"medium\", \"claude\": \"high\" }`). Valid effort values include `none`, `low`, `medium`, `high`, and `xhigh`. Only applies to models that support reasoning effort.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.reasoningEffortFallbackModel": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "object",
+								"properties": {
+									"model": {
+										"type": "string",
+										"description": "Model selector to use when picking the fallback model."
+									},
+									"reasoningEffort": {
+										"type": "string",
+										"description": "Reasoning effort to apply when retrying on the fallback model.",
+										"enum": [
+											"none",
+											"low",
+											"medium",
+											"high",
+											"xhigh"
+										]
+									}
+								},
+								"required": [
+									"model"
+								],
+								"additionalProperties": false
+							}
+						],
+						"default": "claude-opus-4",
+						"markdownDescription": "Model selector to use when auto-retrying after the current model rejects a reasoning effort level. Accepts a plain string selector (for example, `\"claude-opus-4\"`) or an object like `{ \"model\": \"claude-opus-4\", \"reasoningEffort\": \"medium\" }`. The first non-current model that exactly matches, starts with, or contains the selector in its family, id, or display name is selected. Set the string to empty or omit `model` in the object form to disable fallback and downgrade effort instead.",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.installExtensionSkill.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4363,32 +4363,6 @@
 						"tags": [
 							"advanced",
 							"experimental"
-						]
-					},
-					"github.copilot.chat.reasoningEffort": {
-						"oneOf": [
-							{
-								"type": "string",
-								"enum": ["low", "medium", "high"]
-							},
-							{
-								"type": "object",
-								"properties": {
-									"default": {
-										"type": "string",
-										"enum": ["low", "medium", "high"],
-										"description": "Default reasoning effort for all model families"
-									}
-								},
-								"additionalProperties": {
-									"type": "string",
-									"enum": ["low", "medium", "high"]
-								}
-							}
-						],
-						"markdownDescription": "%github.copilot.config.chat.reasoningEffort%",
-						"tags": [
-							"advanced"
 						]
 					},
 					"github.copilot.chat.agent.omitFileAttachmentContents": {

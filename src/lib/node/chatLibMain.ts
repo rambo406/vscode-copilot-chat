@@ -74,6 +74,7 @@ import { DiffServiceImpl } from '../../platform/diff/node/diffServiceImpl';
 import { ICAPIClientService } from '../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../platform/endpoint/common/endpointProvider';
+import { IRateLimitSimulationService } from '../../platform/endpoint/common/rateLimitSimulationService';
 import { CAPIClientImpl } from '../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../platform/endpoint/node/domainServiceImpl';
 import { IEnvService, NameAndVersion, OperatingSystem } from '../../platform/env/common/envService';
@@ -393,6 +394,14 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	builder.define(IEndpointProvider, new NullEndpointProvider());
+	builder.define(IRateLimitSimulationService, {
+		_serviceBrand: undefined,
+		consume: () => undefined,
+		isArmed: () => false,
+		arm: () => { },
+		disarm: () => { },
+		onDidChangeArmedState: () => ({ dispose: () => { } }),
+	} as unknown as IRateLimitSimulationService);
 	const configProvider = new InMemoryConfigProvider(new DefaultsOnlyConfigProvider());
 	if (options.configOverrides) {
 		configProvider.setOverrides(options.configOverrides);

@@ -240,9 +240,9 @@ describe('ToolCallingLoop autopilot', () => {
 			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.Failed))).toBe(true);
 		});
 
-		it('should retry on BadRequest', () => {
+		it('should not retry on BadRequest', () => {
 			const loop = createLoop('autoApprove');
-			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.BadRequest))).toBe(true);
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.BadRequest))).toBe(false);
 		});
 
 		it('should not retry on RateLimited', () => {

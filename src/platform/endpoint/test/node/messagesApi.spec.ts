@@ -12,6 +12,7 @@ import { ConfigKey, IConfigurationService } from '../../../configuration/common/
 import { ILogService } from '../../../log/common/logService';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
 import { IChatEndpoint } from '../../../networking/common/networking';
+import { IToolDeferralService } from '../../../networking/common/toolDeferralService';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { addToolsAndSystemCacheControl, buildToolInputSchema, createMessagesRequestBody, rawMessagesToMessagesAPI } from '../../node/messagesApi';
@@ -670,7 +671,7 @@ suite('createMessagesRequestBody effort mapping', function () {
 		forceExtendedThinking: boolean;
 	}>): ServicesAccessor {
 		const mockConfigurationService: Partial<IConfigurationService> = {
-			getConfig: () => false as any,
+			getConfig: () => undefined as any,
 			getExperimentBasedConfig: ((key: { fullyQualifiedId: string }) => {
 				if (key.fullyQualifiedId === ConfigKey.AnthropicThinkingBudget.fullyQualifiedId) {
 					return configOverrides?.thinkingBudget ?? 16000;
@@ -678,7 +679,7 @@ suite('createMessagesRequestBody effort mapping', function () {
 				if (key.fullyQualifiedId === ConfigKey.AnthropicForceExtendedThinking.fullyQualifiedId) {
 					return configOverrides?.forceExtendedThinking ?? false;
 				}
-				return false;
+				return undefined;
 			}) as any,
 		};
 
@@ -698,11 +699,16 @@ suite('createMessagesRequestBody effort mapping', function () {
 			onDidTreatmentsChange: { event: () => ({ dispose: () => { } }) } as any,
 		};
 
+		const mockToolDeferralService: Partial<IToolDeferralService> = {
+			isNonDeferredTool: () => true,
+		};
+
 		const services = new Map<unknown, unknown>();
 		services.set(IConfigurationService, mockConfigurationService);
 		services.set(ILogService, mockLogService);
 		services.set(ITelemetryService, mockTelemetryService);
 		services.set(IExperimentationService, mockExperimentationService);
+		services.set(IToolDeferralService, mockToolDeferralService);
 
 		return {
 			get: <T>(id: { _serviceBrand?: undefined } & ((...args: any[]) => any)): T => services.get(id) as T,

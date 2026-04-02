@@ -6,7 +6,9 @@
 
 import { Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
-import type { ChatLanguageModelToolReference, ChatPromptReference, ChatRequest, ExtendedChatResponsePart, LanguageModelChat } from 'vscode';
+import type { ChatErrorDetails, ChatLanguageModelToolReference, ChatPromptReference, ChatRequest, ExtendedChatResponsePart, LanguageModelChat } from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../../platform/authentication/common/copilotToken';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/common/commonTypes';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
@@ -23,6 +25,7 @@ import { NullWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearc
 import { IWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { ChatResponseStreamImpl } from '../../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Event } from '../../../../util/vs/base/common/event';
 import { isObject, isUndefinedOrNull } from '../../../../util/vs/base/common/types';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
@@ -119,6 +122,11 @@ suite('defaultIntentRequestHandler', () => {
 			}
 
 			return promptResult;
+		}
+
+		// Provide modifyErrorDetails so supportsContinueOnError is true
+		modifyErrorDetails(details: ChatErrorDetails, _response: ChatResponse): ChatErrorDetails {
+			return details;
 		}
 	}
 
@@ -363,6 +371,19 @@ suite('defaultIntentRequestHandler', () => {
 	suite('shouldAutoRetryWithFallbackModel', () => {
 		let mockFetcher: MockChatMLFetcher;
 
+		// Mock authentication service for error handling tests
+		class MockAuthService implements Partial<IAuthenticationService> {
+			declare readonly _serviceBrand: undefined;
+			readonly onDidAuthenticationChange = Event.None;
+			readonly onDidAccessTokenChange = Event.None;
+			readonly onDidAdoAuthenticationChange = Event.None;
+			readonly isMinimalMode = false;
+
+			getCopilotToken(): Promise<CopilotToken> {
+				return Promise.resolve(new CopilotToken(createTestExtendedTokenInfo({ token: 'test-token', copilot_plan: 'individual' })));
+			}
+		}
+
 		beforeEach(async () => {
 			// Dispose the accessor created by the parent beforeEach and recreate with MockChatMLFetcher
 			accessor.dispose();
@@ -373,6 +394,7 @@ suite('defaultIntentRequestHandler', () => {
 			services.define(ITelemetryService, telemetry);
 			services.define(IChatMLFetcher, mockFetcher);
 			services.define(IWorkspaceFileIndex, new SyncDescriptor(NullWorkspaceFileIndex));
+			services.define(IAuthenticationService, new MockAuthService() as IAuthenticationService);
 
 			accessor = services.createTestingAccessor();
 			endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);

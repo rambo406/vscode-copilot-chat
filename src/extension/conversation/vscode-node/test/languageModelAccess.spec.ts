@@ -69,7 +69,7 @@ describe('buildConfigurationSchema', () => {
 		expect(reasoningEffort.enumItemLabels![xhighIndex]).toBe('Extra High');
 
 		// Verify the description for xhigh
-		expect(reasoningEffort.enumDescriptions![xhighIndex]).toBe('Extended reasoning for the most complex tasks');
+		expect(reasoningEffort.enumDescriptions![xhighIndex]).toBe('Maximum reasoning depth but slower');
 	});
 
 	it('produces capitalized labels for standard effort levels', () => {
