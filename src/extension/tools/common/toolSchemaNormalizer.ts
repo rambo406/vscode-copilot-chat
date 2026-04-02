@@ -128,13 +128,52 @@ const jsonSchemaRules: ((family: string, node: JsonSchema, didFix: (message: str
 	},
 	(_family, schema, onFix) => {
 		// validated this fails both for claude and 4o
-		const unsupported = ['oneOf', 'anyOf', 'allOf', 'not', 'if', 'then', 'else'];
-		for (const key of unsupported) {
-			if (schema.hasOwnProperty(key)) {
+		// For composition keywords with object schemas, merge properties into the parent
+		const compositionKeys = ['oneOf', 'anyOf', 'allOf'] as const;
+		const nonMergeableKeys = ['not', 'if', 'then', 'else'];
+
+		forEachSchemaNode(schema, n => {
+			for (const key of compositionKeys) {
+				if (!n.hasOwnProperty(key)) {
+					continue;
+				}
+
+				const branches = (n as any)[key] as JsonSchema[] | undefined;
+				if (Array.isArray(branches)) {
+					const parentObj = n as ObjectJsonSchema;
+					for (const branch of branches) {
+						if (branch && typeof branch === 'object' && 'properties' in branch) {
+							const branchObj = branch as ObjectJsonSchema;
+							if (branchObj.properties) {
+								if (!parentObj.properties) {
+									parentObj.properties = {};
+								}
+								for (const [propName, propSchema] of Object.entries(branchObj.properties)) {
+									if (!(propName in parentObj.properties)) {
+										parentObj.properties[propName] = propSchema;
+									}
+								}
+							}
+							if (branchObj.required) {
+								// Only merge required properties that are shared across ALL branches
+								// For anyOf/oneOf, a property is only truly required if
+								// it's required in all branches (or already required in the parent)
+							}
+						}
+					}
+				}
+
 				onFix(`object has unsupported top-level schema keyword '${key}'`);
-				delete (schema as any)[key];
+				delete (n as any)[key];
 			}
-		}
+
+			for (const key of nonMergeableKeys) {
+				if (n.hasOwnProperty(key)) {
+					onFix(`object has unsupported top-level schema keyword '${key}'`);
+					delete (n as any)[key];
+				}
+			}
+		});
 	},
 	(_family, schema, onFix) => {
 		forEachSchemaNode(schema, n => {

@@ -357,4 +357,171 @@ describe('ToolSchemaNormalizer', () => {
 		expect((schema![0].function.parameters as any).properties.multiType.type).toEqual(['string', 'number']);
 		expect((schema![0].function.parameters as any).properties.multiType.nullable).toBeUndefined();
 	});
+
+	test('merges anyOf properties into top-level schema', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GPT41, [{
+			type: 'function',
+			function: {
+				name: 'test',
+				description: 'test',
+				parameters: {
+					type: 'object',
+					properties: {
+						command: { type: 'string', description: 'The command' },
+					},
+					required: ['command'],
+					anyOf: [
+						{
+							properties: {
+								mode: { type: 'string', enum: ['sync'], description: 'Sync mode' },
+								timeout: { type: 'number', description: 'Timeout in ms' },
+							},
+						},
+						{
+							properties: {
+								mode: { type: 'string', enum: ['async'], description: 'Async mode' },
+							},
+						},
+					],
+				} as any,
+			},
+		}]);
+
+		const params = schema![0].function.parameters as any;
+		expect(params.anyOf).toBeUndefined();
+		expect(params.properties.command).toEqual({ type: 'string', description: 'The command' });
+		expect(params.properties.mode).toEqual({ type: 'string', enum: ['sync'], description: 'Sync mode' });
+		expect(params.properties.timeout).toEqual({ type: 'number', description: 'Timeout in ms' });
+	});
+
+	test('merges allOf properties into top-level schema', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GPT41, [{
+			type: 'function',
+			function: {
+				name: 'test',
+				description: 'test',
+				parameters: {
+					type: 'object',
+					properties: {
+						command: { type: 'string' },
+					},
+					allOf: [
+						{
+							properties: {
+								extra: { type: 'string' },
+							},
+						},
+					],
+				} as any,
+			},
+		}]);
+
+		const params = schema![0].function.parameters as any;
+		expect(params.allOf).toBeUndefined();
+		expect(params.properties.command).toEqual({ type: 'string' });
+		expect(params.properties.extra).toEqual({ type: 'string' });
+	});
+
+	test('does not overwrite existing parent properties when merging anyOf', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GPT41, [{
+			type: 'function',
+			function: {
+				name: 'test',
+				description: 'test',
+				parameters: {
+					type: 'object',
+					properties: {
+						shared: { type: 'string', description: 'parent version' },
+					},
+					anyOf: [
+						{
+							properties: {
+								shared: { type: 'number', description: 'branch version' },
+								extra: { type: 'boolean' },
+							},
+						},
+					],
+				} as any,
+			},
+		}]);
+
+		const params = schema![0].function.parameters as any;
+		expect(params.properties.shared).toEqual({ type: 'string', description: 'parent version' });
+		expect(params.properties.extra).toEqual({ type: 'boolean' });
+	});
+
+	test('merges oneOf inside a nested property schema', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GPT41, [{
+			type: 'function',
+			function: {
+				name: 'click_element',
+				description: 'click an element',
+				parameters: {
+					type: 'object',
+					properties: {
+						selector: {
+							oneOf: [
+								{ type: 'string', description: 'CSS selector' },
+								{ type: 'object', properties: { xpath: { type: 'string' } } },
+							],
+						},
+					},
+				} as any,
+			},
+		}]);
+
+		const params = schema![0].function.parameters as any;
+		expect(params.properties.selector.oneOf).toBeUndefined();
+	});
+
+	test('merges allOf inside a nested property schema', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GPT41, [{
+			type: 'function',
+			function: {
+				name: 'drag_element',
+				description: 'drag an element',
+				parameters: {
+					type: 'object',
+					properties: {
+						target: {
+							allOf: [
+								{ type: 'object', properties: { x: { type: 'number' } } },
+								{ type: 'object', properties: { y: { type: 'number' } } },
+							],
+						},
+					},
+				} as any,
+			},
+		}]);
+
+		const params = schema![0].function.parameters as any;
+		expect(params.properties.target.allOf).toBeUndefined();
+		expect(params.properties.target.properties.x).toEqual({ type: 'number' });
+		expect(params.properties.target.properties.y).toEqual({ type: 'number' });
+	});
+
+	test('merges anyOf inside a nested property schema', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GPT41, [{
+			type: 'function',
+			function: {
+				name: 'run_in_terminal',
+				description: 'run a command',
+				parameters: {
+					type: 'object',
+					properties: {
+						command: { type: 'string' },
+						mode: {
+							anyOf: [
+								{ type: 'string', enum: ['sync'] },
+								{ type: 'string', enum: ['async'] },
+							],
+						},
+					},
+				} as any,
+			},
+		}]);
+
+		const params = schema![0].function.parameters as any;
+		expect(params.properties.mode.anyOf).toBeUndefined();
+	});
 });
