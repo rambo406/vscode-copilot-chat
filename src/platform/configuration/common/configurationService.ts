@@ -901,6 +901,8 @@ export namespace ConfigKey {
 	/** Enable large prompt experiment for GPT-5.4 model */
 	export const EnableGpt54LargePromptExp = defineSetting<boolean>('chat.gpt54LargePrompt.enabled', ConfigType.ExperimentBased, false);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
+	/** Show elapsed time for tool calls and model requests in the chat response stream */
+	export const ShowToolTiming = defineSetting<boolean>('chat.showToolTiming', ConfigType.Simple, true, vBoolean());
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
 	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.Simple, 16000);
 	/** Force extended thinking (with explicit token budgets) even on models that support adaptive thinking. */

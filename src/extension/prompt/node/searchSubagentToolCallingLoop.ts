@@ -25,6 +25,7 @@ import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions }
 import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
+import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
@@ -160,6 +161,11 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			reasoningEffort,
 			requestOptions: {
 				...requestOptions,
+				tools: normalizeToolSchema(
+					endpoint.family,
+					requestOptions.tools,
+					(tool, rule) => this._logService.warn(`Tool ${tool} failed validation: ${rule}`),
+				),
 				temperature: 0
 			},
 			// This loop is inside a tool called from another request, so never user initiated

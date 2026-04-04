@@ -24,6 +24,7 @@ import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions }
 import { ExecutionSubagentPrompt } from '../../prompts/node/agent/executionSubagentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
+import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
@@ -150,6 +151,11 @@ export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<IExecution
 			reasoningEffort,
 			requestOptions: {
 				...(requestOptions ?? {}),
+				tools: normalizeToolSchema(
+					endpoint.family,
+					requestOptions?.tools,
+					(tool, rule) => this._logService.warn(`Tool ${tool} failed validation: ${rule}`),
+				),
 				temperature: 0
 			},
 			// This loop is inside a tool called from another request, so never user initiated

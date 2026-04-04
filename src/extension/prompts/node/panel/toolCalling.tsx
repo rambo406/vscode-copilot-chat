@@ -219,6 +219,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 
 		const extraMetadata: PromptMetadata[] = [];
 		let isCancelled = false;
+		let durationMs: number | undefined;
 		let toolResult = props.toolCallResult;
 		const copilotTool = toolsService.getCopilotTool(props.toolCall.name as ToolName);
 		if (toolResult === undefined) {
@@ -239,6 +240,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 			}
 
 			let outcome: ToolInvocationOutcome = toolResult === undefined ? ToolInvocationOutcome.Success : ToolInvocationOutcome.InvalidInput;
+			let toolStartTime: number | undefined;
 			if (toolResult === undefined) {
 				try {
 					if (promptContext.tools && !promptContext.tools.availableTools.find(t => t.name === props.toolCall.name)) {
@@ -293,7 +295,9 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						sessionTranscriptService.logToolExecutionStart(transcriptSessionId, props.toolCall.id, props.toolCall.name, parsedArgs);
 					}
 
+					toolStartTime = Date.now();
 					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, props.token);
+					durationMs = Date.now() - toolStartTime;
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 
 					// Run hook context handling after tool execution
@@ -303,6 +307,9 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
 					}
 				} catch (err) {
+					if (toolStartTime !== undefined) {
+						durationMs = Date.now() - toolStartTime;
+					}
 					const errResult = toolCallErrorToResult(err, props.toolCall.name);
 					toolResult = errResult.result;
 					isCancelled = errResult.isCancelled ?? false;
@@ -322,7 +329,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 			sendToolCallTelemetry(props, promptContext, outcome, validation, endpointProvider, telemetryService);
 		}
 
-		return { toolResult, isCancelled, extraMetadata };
+		return { toolResult, isCancelled, extraMetadata, durationMs };
 	}
 
 	let call: IToolResultElementActualProps['call'];
@@ -391,6 +398,7 @@ interface IToolResultElementActualProps {
 		toolResult: LanguageModelToolResult2;
 		isCancelled: boolean;
 		extraMetadata: PromptMetadata[];
+		durationMs?: number;
 	}>;
 	enableCacheBreakpoints: boolean;
 	truncateAt: number | undefined;
@@ -404,7 +412,7 @@ interface IToolResultElementActualProps {
  */
 class ToolResultElement extends PromptElement<IToolResultElementActualProps & BasePromptElementProps, void> {
 	async render(state: void, sizing: PromptSizing) {
-		const { extraMetadata, toolResult, isCancelled } = await this.props.call(sizing);
+		const { extraMetadata, toolResult, isCancelled, durationMs } = await this.props.call(sizing);
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
 				<Chunk>
@@ -415,7 +423,7 @@ class ToolResultElement extends PromptElement<IToolResultElementActualProps & Ba
 
 		return (
 			<ToolMessage toolCallId={this.props.toolCall.id!}>
-				<meta value={new ToolResultMetadata(this.props.toolCall.id!, toolResult, isCancelled)} />
+				<meta value={new ToolResultMetadata(this.props.toolCall.id!, toolResult, isCancelled, durationMs)} />
 				{...extraMetadata.map(m => <meta value={m} />)}
 				{toolResultElement}
 				{this.props.isLast && this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
@@ -578,7 +586,8 @@ export class ToolResultMetadata extends PromptMetadata {
 	constructor(
 		public readonly toolCallId: string,
 		public readonly result: LanguageModelToolResult2,
-		public isCancelled?: boolean
+		public isCancelled?: boolean,
+		public readonly durationMs?: number
 	) {
 		super();
 	}

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatExtPerfMark, clearChatExtMarks, getChatExtMarks, markChatExt } from '../performance';
+import { ChatExtPerfMark, clearChatExtMarks, formatDuration, getChatExtMarks, markChatExt } from '../performance';
 
 describe('performance', () => {
 
@@ -111,6 +111,31 @@ describe('performance', () => {
 				}
 				vi.resetModules();
 			}
+		});
+	});
+
+	describe('formatDuration', () => {
+		it('formats sub-second durations in milliseconds', () => {
+			expect(formatDuration(0)).toBe('(0ms)');
+			expect(formatDuration(42)).toBe('(42ms)');
+			expect(formatDuration(999)).toBe('(999ms)');
+		});
+
+		it('rounds fractional milliseconds', () => {
+			expect(formatDuration(42.7)).toBe('(43ms)');
+			expect(formatDuration(0.4)).toBe('(0ms)');
+		});
+
+		it('formats durations under 60s in seconds with one decimal', () => {
+			expect(formatDuration(1000)).toBe('(1.0s)');
+			expect(formatDuration(1200)).toBe('(1.2s)');
+			expect(formatDuration(59999)).toBe('(60.0s)');
+		});
+
+		it('formats durations of 60s and above in minutes and seconds', () => {
+			expect(formatDuration(60_000)).toBe('(1m 0s)');
+			expect(formatDuration(72_000)).toBe('(1m 12s)');
+			expect(formatDuration(125_000)).toBe('(2m 5s)');
 		});
 	});
 });

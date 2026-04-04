@@ -24,6 +24,12 @@ export function normalizeToolSchema(family: string, tools: OpenAiFunctionTool[] 
 		return undefined;
 	}
 
+	const cacheKey = getNormalizationCacheKey(family, tools);
+	const cached = normalizationCache.get(cacheKey);
+	if (cached) {
+		return cached;
+	}
+
 	const output: OpenAiFunctionTool[] = [];
 	for (const tool of tools) {
 		try {
@@ -48,8 +54,19 @@ export function normalizeToolSchema(family: string, tools: OpenAiFunctionTool[] 
 		}
 	}
 
-
+	normalizationCache.set(cacheKey, output);
 	return output;
+}
+
+const normalizationCache = new Map<string, OpenAiFunctionTool[]>();
+
+function getNormalizationCacheKey(family: string, tools: OpenAiFunctionTool[]): string {
+	const names = tools.map(t => t.function.name).sort().join(',');
+	return `${family}:${names}`;
+}
+
+export function clearNormalizationCache(): void {
+	normalizationCache.clear();
 }
 
 

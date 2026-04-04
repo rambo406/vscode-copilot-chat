@@ -198,3 +198,22 @@ export function markChatExtGlobal(name: ChatExtGlobalPerfMarkName): void {
 export function getChatExtMarks(): { name: string; startTime: number }[] {
 	return perf.getMarks();
 }
+
+/**
+ * Formats a duration in milliseconds into a human-readable string.
+ * - Under 1000ms: `(42ms)`
+ * - Under 60s: `(1.2s)`
+ * - 60s and above: `(1m 12s)`
+ */
+export function formatDuration(ms: number): string {
+	if (ms < 1000) {
+		return `(${Math.round(ms)}ms)`;
+	}
+	if (ms < 60_000) {
+		const seconds = ms / 1000;
+		return `(${seconds.toFixed(1)}s)`;
+	}
+	const minutes = Math.floor(ms / 60_000);
+	const seconds = Math.round((ms % 60_000) / 1000);
+	return `(${minutes}m ${seconds}s)`;
+}

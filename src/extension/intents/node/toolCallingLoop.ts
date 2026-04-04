@@ -28,7 +28,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
-import { ChatExtPerfMark, markChatExt } from '../../../util/common/performance';
+import { ChatExtPerfMark, formatDuration, markChatExt } from '../../../util/common/performance';
 import { DeferredPromise, timeout } from '../../../util/vs/base/common/async';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -1267,6 +1267,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
 		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillFetch);
+		const fetchStartTime = Date.now();
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
@@ -1318,6 +1319,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			this.stopHookUserInitiated = false;
 		});
 		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.DidFetch);
+		const fetchDurationMs = Date.now() - fetchStartTime;
+		if (this._configurationService.getConfig(ConfigKey.ShowToolTiming) && outputStream) {
+			outputStream.progress(`Model response ${formatDuration(fetchDurationMs)}`);
+		}
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: effectiveBuildPromptResult.messages,
@@ -1583,9 +1588,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		};
 
 		const buildPromptResult = await this.buildPrompt(buildPromptContext, progress, token);
+		const showTiming = this._configurationService.getConfig(ConfigKey.ShowToolTiming);
 		for (const metadata of buildPromptResult.metadata.getAll(ToolResultMetadata)) {
 			this.logToolResult(buildPromptContext, metadata);
 			this.toolCallResults[metadata.toolCallId] = metadata.result;
+			if (showTiming && metadata.durationMs !== undefined && stream) {
+				const lastTurn = this.toolCallRounds.at(-1);
+				const originalCall = lastTurn?.toolCalls.find(tc => tc.id === metadata.toolCallId);
+				const toolLabel = originalCall?.name ?? metadata.toolCallId;
+				stream.progress(`${toolLabel} ${formatDuration(metadata.durationMs)}`);
+			}
 		}
 
 		if (buildPromptResult.metadata.getAll(ToolResultMetadata).some(r => r.isCancelled)) {

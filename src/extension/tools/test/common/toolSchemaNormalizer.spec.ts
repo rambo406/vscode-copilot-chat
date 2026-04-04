@@ -3,13 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { assert, describe, expect, test } from 'vitest';
+import { assert, beforeEach, describe, expect, test } from 'vitest';
 import { CHAT_MODEL } from '../../../../platform/configuration/common/configurationService';
 import { JsonSchema } from '../../../../platform/configuration/common/jsonSchema';
 import { OpenAiFunctionTool } from '../../../../platform/networking/common/fetch';
-import { normalizeToolSchema } from '../../common/toolSchemaNormalizer';
+import { clearNormalizationCache, normalizeToolSchema } from '../../common/toolSchemaNormalizer';
 
 describe('ToolSchemaNormalizer', () => {
+	beforeEach(() => {
+		clearNormalizationCache();
+	});
+
 	const makeTool = (properties: Record<string, JsonSchema>): OpenAiFunctionTool[] => [{
 		type: 'function',
 		function: {
@@ -523,5 +527,88 @@ describe('ToolSchemaNormalizer', () => {
 
 		const params = schema![0].function.parameters as any;
 		expect(params.properties.mode.anyOf).toBeUndefined();
+	});
+
+	describe('caching', () => {
+		test('returns cached result on second call with same tools and family', () => {
+			clearNormalizationCache();
+			const tools: OpenAiFunctionTool[] = [{
+				type: 'function',
+				function: {
+					name: 'my_tool',
+					description: 'a tool',
+					parameters: { type: 'object', properties: { x: { type: 'string' } } },
+				},
+			}];
+			const result1 = normalizeToolSchema(CHAT_MODEL.GPT41, tools);
+			const result2 = normalizeToolSchema(CHAT_MODEL.GPT41, tools);
+			expect(result1).toBe(result2);
+		});
+
+		test('onFix only fires on cache miss', () => {
+			clearNormalizationCache();
+			const tools: OpenAiFunctionTool[] = [{
+				type: 'function',
+				function: {
+					name: 'fix_tool',
+					description: '',
+					parameters: { type: 'object', properties: {} },
+				},
+			}];
+			const fixes: string[] = [];
+			normalizeToolSchema(CHAT_MODEL.GPT41, tools, (_tool, rule) => fixes.push(rule));
+			expect(fixes.length).toBeGreaterThan(0);
+
+			const fixes2: string[] = [];
+			normalizeToolSchema(CHAT_MODEL.GPT41, tools, (_tool, rule) => fixes2.push(rule));
+			expect(fixes2).toHaveLength(0);
+		});
+
+		test('cache miss when family changes', () => {
+			clearNormalizationCache();
+			const tools: OpenAiFunctionTool[] = [{
+				type: 'function',
+				function: {
+					name: 'family_tool',
+					description: 'a tool',
+					parameters: { type: 'object', properties: { x: { type: 'string' } } },
+				},
+			}];
+			const result1 = normalizeToolSchema(CHAT_MODEL.GPT41, tools);
+			const result2 = normalizeToolSchema(CHAT_MODEL.CLAUDE_37_SONNET, tools);
+			expect(result1).not.toBe(result2);
+		});
+
+		test('cache miss when tool names change', () => {
+			clearNormalizationCache();
+			const tools1: OpenAiFunctionTool[] = [{
+				type: 'function',
+				function: { name: 'tool_a', description: 'a', parameters: { type: 'object', properties: {} } },
+			}];
+			const tools2: OpenAiFunctionTool[] = [{
+				type: 'function',
+				function: { name: 'tool_b', description: 'b', parameters: { type: 'object', properties: {} } },
+			}];
+			const result1 = normalizeToolSchema(CHAT_MODEL.GPT41, tools1);
+			const result2 = normalizeToolSchema(CHAT_MODEL.GPT41, tools2);
+			expect(result1).not.toBe(result2);
+		});
+
+		test('clearNormalizationCache forces re-normalization', () => {
+			clearNormalizationCache();
+			const tools: OpenAiFunctionTool[] = [{
+				type: 'function',
+				function: {
+					name: 'clear_tool',
+					description: 'a tool',
+					parameters: { type: 'object', properties: { x: { type: 'string' } } },
+				},
+			}];
+			const result1 = normalizeToolSchema(CHAT_MODEL.GPT41, tools);
+			clearNormalizationCache();
+			const result2 = normalizeToolSchema(CHAT_MODEL.GPT41, tools);
+			expect(result1).not.toBe(result2);
+			expect(result1).toEqual(result2);
+		});
 	});
 });
