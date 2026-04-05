@@ -292,8 +292,9 @@ export class ChatParticipantRequestHandler {
 				}
 			} satisfies ICopilotChatResult, true);
 
-			// Auto-retry with fallback account when rate-limited
+			// Auto-retry with fallback account when rate-limited (skip for subagents)
 			if ((result as ICopilotChatResultIn).metadata?.shouldAutoRetryWithFallbackAccount
+				&& !this.request.subAgentInvocationId
 				&& result.errorDetails
 				&& !result.errorDetails.responseIsFiltered) {
 				const retryAsContinuation = async (retryRequest: ChatRequest) => {

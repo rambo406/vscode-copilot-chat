@@ -384,6 +384,7 @@
 	"github.copilot.config.chat.agentDebugLog.fileLogging.flushIntervalMs": "How often (in milliseconds) buffered debug log entries are flushed to disk. Lower values provide more up-to-date logs at the cost of more frequent disk writes.",
 	"github.copilot.config.chat.agentDebugLog.fileLogging.maxRetainedSessionLogs": "Maximum number of chat debug session log directories to retain on disk. Each chat session produces one directory. Older session logs are automatically deleted when this limit is exceeded.",
 	"github.copilot.config.chat.agentDebugLog.fileLogging.maxSessionLogSizeMB": "Maximum size in megabytes for a single chat debug session log file. When the log exceeds this size, older entries are truncated to retain the most recent data. Defaults to 100 MB.",
+	"github.copilot.config.chat.showToolTiming": "Show inline timing annotations for tool calls and model requests in chat responses. When enabled, each tool invocation and model request displays how long it took.",
 	"github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled": "Enable diagnostics context provider for next edit suggestions.",
 	"github.copilot.config.inlineEdits.chatSessionContextProvider.enabled": "Enable chat session context provider for next edit suggestions.",
 	"github.copilot.config.codesearch.agent.enabled": "Enable code search capabilities in agent mode.",

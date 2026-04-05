@@ -385,9 +385,11 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		const simulatedError = this._rateLimitSimulationService.consume();
-		if (simulatedError) {
-			return simulatedError;
+		if (options.requestKindOptions?.kind !== 'subagent') {
+			const simulatedError = this._rateLimitSimulationService.consume();
+			if (simulatedError) {
+				return simulatedError;
+			}
 		}
 
 		const useWebSocket = options.useWebSocket ?? !!(
