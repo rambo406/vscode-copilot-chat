@@ -1002,6 +1002,9 @@ export namespace ConfigKey {
 	export const CopilotMemoryEnabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
 	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, true);
 	export const ViewImageToolEnabled = defineSetting<boolean>('chat.tools.viewImage.enabled', ConfigType.ExperimentBased, true);
+
+	/** Opt-in first-turn bootstrap trigger: rewrites the first top-level panel request to a configurable model and reasoning effort. false disables the feature. */
+	export const ReasoningEffortBootstrapTrigger = defineSetting<false | { model?: string; reasoningEffort?: string }>('chat.reasoningEffortBootstrapTrigger', ConfigType.Simple, false);
 }
 
 export function getAllConfigKeys(): string[] {

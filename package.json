@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.43.0",
+	"version": "0.43.1",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -3033,6 +3033,30 @@
 						"tags": [
 							"onExp"
 						]
+					},
+					"github.copilot.chat.reasoningEffortBootstrapTrigger": {
+						"oneOf": [
+							{
+								"type": "boolean",
+								"enum": [false]
+							},
+							{
+								"type": "object",
+								"properties": {
+									"model": {
+										"type": "string",
+										"description": "%github.copilot.config.reasoningEffortBootstrapTrigger.model%"
+									},
+									"reasoningEffort": {
+										"type": "string",
+										"description": "%github.copilot.config.reasoningEffortBootstrapTrigger.reasoningEffort%"
+									}
+								},
+								"additionalProperties": false
+							}
+						],
+						"default": false,
+						"markdownDescription": "%github.copilot.config.reasoningEffortBootstrapTrigger%"
 					},
 					"github.copilot.chat.customInstructionsInSystemMessage": {
 						"type": "boolean",

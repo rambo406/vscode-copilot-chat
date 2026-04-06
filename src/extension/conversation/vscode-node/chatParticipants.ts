@@ -10,6 +10,7 @@ import { IChatSessionService } from '../../../platform/chat/common/chatSessionSe
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ChatExtPerfMark, clearChatExtMarks, markChatExt } from '../../../util/common/performance';
@@ -26,6 +27,7 @@ import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
+import { tryApplyBootstrap } from './modelSwitching';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 
@@ -71,6 +73,7 @@ class ChatAgents implements IDisposable {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptCategorizerService private readonly promptCategorizerService: IPromptCategorizerService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@ILogService private readonly logService: ILogService,
 		@IChatSessionService chatSessionService: IChatSessionService,
 	) {
 		this._disposables.add(chatSessionService.onDidDisposeChatSession(sessionId => clearChatExtMarks(sessionId)));
@@ -231,6 +234,10 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				if (!request.subAgentInvocationId) {
 					this.interactionService.startInteraction();
 				}
+
+				// Apply first-turn bootstrap trigger if enabled
+				const bootstrapResult = await tryApplyBootstrap(request, context.history.length, this.configurationService, this.logService, this.telemetryService);
+				request = bootstrapResult.request;
 
 				// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
 				// categorization event to join and ChatTelemetryBuilder will generate its own ID.
