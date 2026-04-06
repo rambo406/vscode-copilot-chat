@@ -22,7 +22,7 @@ vi.mock('vscode', () => ({
 	},
 }));
 
-import { applyFallbackModelRequest, findConfiguredFallbackModel, resolveReasoningEffortFallbackModelSetting, switchToFallbackModel } from '../modelSwitching';
+import { applyBootstrapModelRequest, applyConfiguredBootstrapRequest, applyFallbackModelRequest, findConfiguredFallbackModel, resolveReasoningEffortBootstrapTriggerSetting, resolveReasoningEffortFallbackModelSetting, shouldApplyReasoningEffortBootstrapTrigger, switchToFallbackModel } from '../modelSwitching';
 
 // --- Helpers ------------------------------------------------------------
 
@@ -198,6 +198,26 @@ describe('resolveReasoningEffortFallbackModelSetting', () => {
 	});
 });
 
+describe('resolveReasoningEffortBootstrapTriggerSetting', () => {
+	test('returns undefined when bootstrap trigger is disabled', () => {
+		expect(resolveReasoningEffortBootstrapTriggerSetting(false)).toBeUndefined();
+	});
+
+	test('applies default model and reasoning effort when fields are omitted', () => {
+		expect(resolveReasoningEffortBootstrapTriggerSetting({})).toEqual({
+			modelSelector: 'gpt-5-mini',
+			reasoningEffort: 'xhigh',
+		});
+	});
+
+	test('honors explicit bootstrap model and reasoning effort overrides', () => {
+		expect(resolveReasoningEffortBootstrapTriggerSetting({ model: 'gpt-5.4', reasoningEffort: 'medium' })).toEqual({
+			modelSelector: 'gpt-5.4',
+			reasoningEffort: 'medium',
+		});
+	});
+});
+
 describe('findConfiguredFallbackModel', () => {
 	test('matches configured selector against family, id, and name', () => {
 		const models = [
@@ -239,6 +259,133 @@ describe('applyFallbackModelRequest', () => {
 		expect(result.model.id).toBe('claude-opus-id');
 		expect(result.modelConfiguration).toEqual({
 			reasoningEffort: 'high',
+		});
+	});
+});
+
+describe('applyConfiguredBootstrapRequest', () => {
+	test('returns a bootstrapped request when the configured model is available', () => {
+		const request = createMockRequest('gpt-4o');
+		const models = [
+			createChatModel({ id: 'gpt-5-mini-id', family: 'gpt-5-mini', name: 'GPT-5 Mini' }),
+			createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' }),
+		];
+
+		const result = applyConfiguredBootstrapRequest(request, models, {
+			modelSelector: 'gpt-5-mini',
+			reasoningEffort: 'xhigh',
+		});
+
+		expect(result).toMatchObject({
+			model: { id: 'gpt-5-mini-id' },
+			modelConfiguration: {
+				reasoningEffort: 'xhigh',
+				_skipReasoningEffortOverride: true,
+			},
+		});
+	});
+
+	test('returns undefined when the configured bootstrap model is unavailable', () => {
+		const request = createMockRequest('gpt-4o');
+		const models = [createChatModel({ id: 'claude-opus-id', family: 'claude-opus-4-6', name: 'Claude Opus 4.6' })];
+
+		const result = applyConfiguredBootstrapRequest(request, models, {
+			modelSelector: 'gpt-5-mini',
+			reasoningEffort: 'xhigh',
+		});
+
+		expect(result).toBeUndefined();
+	});
+});
+
+describe('applyBootstrapModelRequest', () => {
+	test('applies a request-scoped bootstrap model and reasoning effort', () => {
+		const request = createMockRequest('gpt-4o');
+		const bootstrapModel = createChatModel({ id: 'gpt-5-mini-id', family: 'gpt-5-mini', name: 'GPT-5 Mini' });
+
+		const result = applyBootstrapModelRequest(request, bootstrapModel, 'xhigh');
+
+		expect(result.model.id).toBe('gpt-5-mini-id');
+		expect(result.modelConfiguration).toEqual({
+			reasoningEffort: 'xhigh',
+			_skipReasoningEffortOverride: true,
+		});
+	});
+});
+
+describe('shouldApplyReasoningEffortBootstrapTrigger', () => {
+	test('returns true for the first top-level panel request', () => {
+		const request = {
+			...createMockRequest('gpt-4o'),
+			attempt: 0,
+			location2: undefined,
+		};
+
+		expect(shouldApplyReasoningEffortBootstrapTrigger(request, 0, false)).toBe(true);
+	});
+
+	test('returns false when the conversation already has history', () => {
+		const request = {
+			...createMockRequest('gpt-4o'),
+			attempt: 0,
+			location2: undefined,
+		};
+
+		expect(shouldApplyReasoningEffortBootstrapTrigger(request, 1, false)).toBe(false);
+	});
+
+	test('returns false for retries, continuations, and subagent requests', () => {
+		const retryRequest = {
+			...createMockRequest('gpt-4o'),
+			attempt: 1,
+			location2: undefined,
+		};
+		const subagentRequest = {
+			...createMockRequest('gpt-4o'),
+			attempt: 0,
+			location2: undefined,
+			subAgentInvocationId: 'subagent-1',
+		};
+
+		expect(shouldApplyReasoningEffortBootstrapTrigger(retryRequest, 0, false)).toBe(false);
+		expect(shouldApplyReasoningEffortBootstrapTrigger(retryRequest, 0, true)).toBe(false);
+		expect(shouldApplyReasoningEffortBootstrapTrigger(subagentRequest, 0, false)).toBe(false);
+	});
+
+	test('returns false for non-panel requests', () => {
+		const request = {
+			...createMockRequest('gpt-4o'),
+			attempt: 0,
+			location2: { kind: 'editor' },
+		};
+
+		expect(shouldApplyReasoningEffortBootstrapTrigger(request, 0, false)).toBe(false);
+	});
+});
+
+describe('bootstrap trigger handoff', () => {
+	test('bootstrapped panel requests remain eligible for fallback-model retry handoff after unsupported-parameter failures', () => {
+		const request = {
+			...createMockRequest('gpt-4o'),
+			attempt: 0,
+			location2: undefined,
+		};
+		const models = [createChatModel({ id: 'gpt-5-mini-id', family: 'gpt-5-mini', name: 'GPT-5 Mini' })];
+
+		const bootstrappedRequest = applyConfiguredBootstrapRequest(request, models, {
+			modelSelector: 'gpt-5-mini',
+			reasoningEffort: 'xhigh',
+		});
+		const result = {
+			metadata: { shouldAutoRetryWithFallbackModel: true },
+			errorDetails: { message: 'Unsupported value' },
+		};
+
+		expect(bootstrappedRequest).toBeDefined();
+		expect(!!result.metadata.shouldAutoRetryWithFallbackModel && !bootstrappedRequest!.subAgentInvocationId).toBe(true);
+		expect(bootstrappedRequest!.modelConfiguration).toEqual({
+			reasoningEffort: 'xhigh',
+			_skipReasoningEffortOverride: true,
 		});
 	});
 });

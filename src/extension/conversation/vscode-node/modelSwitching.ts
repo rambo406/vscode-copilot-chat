@@ -17,6 +17,21 @@ export interface IResolvedReasoningEffortFallbackModelSetting {
 	readonly reasoningEffort?: string;
 }
 
+export interface IReasoningEffortBootstrapTriggerConfiguration {
+	readonly model?: string;
+	readonly reasoningEffort?: string;
+}
+
+export type ReasoningEffortBootstrapTriggerSetting = false | IReasoningEffortBootstrapTriggerConfiguration | undefined;
+
+export interface IResolvedReasoningEffortBootstrapTriggerSetting {
+	readonly modelSelector: string;
+	readonly reasoningEffort: string;
+}
+
+const DEFAULT_REASONING_EFFORT_BOOTSTRAP_TRIGGER_MODEL = 'gpt-5-mini';
+const DEFAULT_REASONING_EFFORT_BOOTSTRAP_TRIGGER_REASONING_EFFORT = 'xhigh';
+
 export function resolveReasoningEffortFallbackModelSetting(setting: ReasoningEffortFallbackModelSetting): IResolvedReasoningEffortFallbackModelSetting | undefined {
 	if (typeof setting === 'string') {
 		const modelSelector = setting.trim();
@@ -39,19 +54,34 @@ export function resolveReasoningEffortFallbackModelSetting(setting: ReasoningEff
 	};
 }
 
-export function findConfiguredFallbackModel(models: readonly vscode.LanguageModelChat[], selector: string, currentModelId: string | undefined): vscode.LanguageModelChat | undefined {
+export function resolveReasoningEffortBootstrapTriggerSetting(setting: ReasoningEffortBootstrapTriggerSetting): IResolvedReasoningEffortBootstrapTriggerSetting | undefined {
+	if (!setting) {
+		return undefined;
+	}
+
+	return {
+		modelSelector: setting.model?.trim() || DEFAULT_REASONING_EFFORT_BOOTSTRAP_TRIGGER_MODEL,
+		reasoningEffort: setting.reasoningEffort?.trim() || DEFAULT_REASONING_EFFORT_BOOTSTRAP_TRIGGER_REASONING_EFFORT,
+	};
+}
+
+export function findConfiguredModel(models: readonly vscode.LanguageModelChat[], selector: string, currentModelId?: string): vscode.LanguageModelChat | undefined {
 	const normalizedSelector = selector.trim().toLowerCase();
 	if (!normalizedSelector) {
 		return undefined;
 	}
 
 	const candidates = models
-		.filter(model => model.id !== currentModelId)
+		.filter(model => currentModelId === undefined || model.id !== currentModelId)
 		.map(model => ({ model, score: getFallbackModelMatchScore(model, normalizedSelector) }))
 		.filter((candidate): candidate is { model: vscode.LanguageModelChat; score: number } => candidate.score !== undefined)
 		.sort((a, b) => a.score - b.score);
 
 	return candidates[0]?.model;
+}
+
+export function findConfiguredFallbackModel(models: readonly vscode.LanguageModelChat[], selector: string, currentModelId: string | undefined): vscode.LanguageModelChat | undefined {
+	return findConfiguredModel(models, selector, currentModelId);
 }
 
 export function applyFallbackModelRequest(request: ChatRequest, fallbackModel: vscode.LanguageModelChat, reasoningEffort?: string): ChatRequest {
@@ -71,6 +101,39 @@ export function applyFallbackModelRequest(request: ChatRequest, fallbackModel: v
 			_skipReasoningEffortOverride: true,
 		},
 	};
+}
+
+export function applyBootstrapModelRequest(request: ChatRequest, bootstrapModel: vscode.LanguageModelChat, reasoningEffort: string): ChatRequest {
+	return {
+		...request,
+		model: bootstrapModel,
+		modelConfiguration: {
+			...request.modelConfiguration,
+			reasoningEffort,
+			_skipReasoningEffortOverride: true,
+		},
+	};
+}
+
+export function applyConfiguredBootstrapRequest(request: ChatRequest, models: readonly vscode.LanguageModelChat[], setting: IResolvedReasoningEffortBootstrapTriggerSetting): ChatRequest | undefined {
+	const bootstrapModel = findConfiguredModel(models, setting.modelSelector);
+	if (!bootstrapModel) {
+		return undefined;
+	}
+
+	return applyBootstrapModelRequest(request, bootstrapModel, setting.reasoningEffort);
+}
+
+export function shouldApplyReasoningEffortBootstrapTrigger(
+	request: Pick<ChatRequest, 'attempt' | 'location2' | 'subAgentInvocationId'>,
+	historyLength: number,
+	isContinuation: boolean,
+): boolean {
+	return request.location2 === undefined
+		&& request.attempt === 0
+		&& historyLength === 0
+		&& !request.subAgentInvocationId
+		&& !isContinuation;
 }
 
 function getFallbackModelMatchScore(model: vscode.LanguageModelChat, normalizedSelector: string): number | undefined {

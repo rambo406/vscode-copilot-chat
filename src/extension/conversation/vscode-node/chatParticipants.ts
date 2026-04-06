@@ -11,6 +11,7 @@ import { IChatSessionService } from '../../../platform/chat/common/chatSessionSe
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ChatExtPerfMark, clearChatExtMarks, markChatExt } from '../../../util/common/performance';
@@ -27,7 +28,7 @@ import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
-import { applyFallbackModelRequest, findConfiguredFallbackModel, resolveReasoningEffortFallbackModelSetting } from './modelSwitching';
+import { applyConfiguredBootstrapRequest, applyFallbackModelRequest, findConfiguredFallbackModel, resolveReasoningEffortBootstrapTriggerSetting, resolveReasoningEffortFallbackModelSetting, shouldApplyReasoningEffortBootstrapTrigger } from './modelSwitching';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 
@@ -73,6 +74,7 @@ class ChatAgents implements IDisposable {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptCategorizerService private readonly promptCategorizerService: IPromptCategorizerService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@ILogService private readonly logService: ILogService,
 		@IChatSessionService chatSessionService: IChatSessionService,
 	) {
 		this._disposables.add(chatSessionService.onDidDisposeChatSession(sessionId => clearChatExtMarks(sessionId)));
@@ -243,6 +245,8 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 					this.promptCategorizerService.categorizePrompt(request, context, telemetryMessageId);
 				}
 
+				request = await this.applyReasoningEffortBootstrapTrigger(request, context);
+
 				const defaultIntentId = typeof defaultIntentIdOrGetter === 'function' ?
 					defaultIntentIdOrGetter(request) :
 					defaultIntentIdOrGetter;
@@ -373,6 +377,28 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		}
 		stream.warning(new vscode.MarkdownString(vscode.l10n.t('You were rate-limited on the selected model. Switching to Auto and retrying your request.')));
 		return request;
+	}
+
+	private async applyReasoningEffortBootstrapTrigger(request: vscode.ChatRequest, context: vscode.ChatContext): Promise<ChatRequest> {
+		const bootstrapSetting = resolveReasoningEffortBootstrapTriggerSetting(this.configurationService.getConfig(ConfigKey.Advanced.ReasoningEffortBootstrapTrigger));
+		if (!bootstrapSetting) {
+			return request;
+		}
+
+		if (!shouldApplyReasoningEffortBootstrapTrigger(request, context.history.length, isContinueOnError(request))) {
+			this.logService.trace('[ChatParticipants] Skipping reasoning-effort bootstrap trigger: request is not the first top-level panel attempt.');
+			return request;
+		}
+
+		const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+		const bootstrappedRequest = applyConfiguredBootstrapRequest(request, allModels, bootstrapSetting);
+		if (!bootstrappedRequest) {
+			this.logService.trace(`[ChatParticipants] Skipping reasoning-effort bootstrap trigger: selector '${bootstrapSetting.modelSelector}' did not match an available model.`);
+			return request;
+		}
+
+		this.logService.trace(`[ChatParticipants] Applied reasoning-effort bootstrap trigger: model='${bootstrappedRequest.model?.id ?? bootstrapSetting.modelSelector}', reasoningEffort='${bootstrapSetting.reasoningEffort}'.`);
+		return bootstrappedRequest;
 	}
 
 	private async switchToFallbackModel(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<ChatRequest> {

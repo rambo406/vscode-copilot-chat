@@ -611,6 +611,8 @@ export namespace ConfigKey {
 		export const OmitBaseAgentInstructions = defineAndMigrateSetting<boolean>('chat.advanced.omitBaseAgentInstructions', 'chat.omitBaseAgentInstructions', false);
 		/** Override the default reasoning effort level for models that support it. Accepts a string (global default) or an object with `default` and per-family keys. */
 		export const ReasoningEffortOverride = defineSetting<string | Record<string, string> | undefined>('chat.reasoningEffort', ConfigType.Simple, undefined);
+		/** Request-scoped bootstrap override for the first top-level panel turn. Accepts `false` or an object with optional `model` and `reasoningEffort`. */
+		export const ReasoningEffortBootstrapTrigger = defineSetting<false | { model?: string; reasoningEffort?: string }>('chat.reasoningEffortBootstrapTrigger', ConfigType.Simple, false);
 		/** Model selector to use when auto-retrying after a reasoning-effort rejection. Accepts a string selector or an object with `model` and optional `reasoningEffort`. */
 		export const ReasoningEffortFallbackModel = defineSetting<string | { model: string; reasoningEffort?: string }>('chat.reasoningEffortFallbackModel', ConfigType.Simple, 'claude-opus-4');
 		export const CLIPlanExitModeEnabled = defineSetting<boolean>('chat.cli.planExitMode.enabled', ConfigType.Simple, false);
