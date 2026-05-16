@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { CancellationToken } from 'vscode';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
@@ -10,7 +11,7 @@ import { IConfigurationService } from '../../configuration/common/configurationS
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { IChatEndpoint } from '../../networking/common/networking';
+import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -27,6 +28,12 @@ import { CopilotChatEndpoint } from './copilotChatEndpoint';
  */
 export class AutoChatEndpoint extends CopilotChatEndpoint {
 	public static readonly pseudoModelId = 'auto';
+
+	/**
+	 * When set, this reasoning effort is injected into every request made through this endpoint.
+	 * Used by the auto mode model ID override to forward a configured reasoning level.
+	 */
+	public reasoningEffortOverride?: string;
 
 	constructor(
 		_wrappedEndpoint: IChatEndpoint,
@@ -63,6 +70,13 @@ export class AutoChatEndpoint extends CopilotChatEndpoint {
 			_chatWebSocketService,
 			_logService
 		);
+	}
+
+	protected override async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
+		if (this.reasoningEffortOverride) {
+			return super._makeChatRequest2({ ...options, reasoningEffort: this.reasoningEffortOverride }, token);
+		}
+		return super._makeChatRequest2(options, token);
 	}
 }
 

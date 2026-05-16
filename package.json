@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.44.0",
+	"version": "0.44.5",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -3982,6 +3982,38 @@
 						"default": "",
 						"scope": "resource",
 						"markdownDescription": "%github.copilot.config.exploreAgent.model%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.autoModeOverride.modelId": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.autoModeOverride.modelId%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.autoModeOverride.reasoningLevel": {
+						"type": "string",
+						"default": "none",
+						"scope": "resource",
+						"enum": [
+							"none",
+							"low",
+							"medium",
+							"high",
+							"xhigh"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.autoModeOverride.reasoningLevel.none%",
+							"%github.copilot.config.autoModeOverride.reasoningLevel.low%",
+							"%github.copilot.config.autoModeOverride.reasoningLevel.medium%",
+							"%github.copilot.config.autoModeOverride.reasoningLevel.high%",
+							"%github.copilot.config.autoModeOverride.reasoningLevel.xhigh%"
+						],
+						"markdownDescription": "%github.copilot.config.autoModeOverride.reasoningLevel%",
 						"tags": [
 							"experimental"
 						]

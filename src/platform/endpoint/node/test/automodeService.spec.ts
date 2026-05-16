@@ -19,6 +19,7 @@ import { NullRequestLogger } from '../../../requestLogger/node/nullRequestLogger
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
 import { ICAPIClientService } from '../../common/capiClient';
+import { AutoChatEndpoint } from '../autoChatEndpoint';
 import { AutomodeService } from '../automodeService';
 
 function createMockHeaders(entries: Record<string, string> = {}): { get(name: string): string | null } {
@@ -914,6 +915,116 @@ describe('AutomodeService', () => {
 			expect(mockLogService.warn).toHaveBeenCalledWith(
 				expect.stringContaining('no vision-capable model')
 			);
+		});
+	});
+
+	describe('auto mode model override', () => {
+		function setOverrideModelId(modelId: string): void {
+			(configurationService as InMemoryConfigurationService).setConfig(ConfigKey.AutoModeOverrideModelId, modelId);
+		}
+
+		function setOverrideReasoningLevel(level: 'none' | 'low' | 'medium' | 'high' | 'xhigh'): void {
+			(configurationService as InMemoryConfigurationService).setConfig(ConfigKey.AutoModeOverrideReasoningLevel, level);
+		}
+
+		it('should return the override endpoint when model ID matches a known endpoint', async () => {
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			setOverrideModelId('claude-sonnet');
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test override',
+				sessionId: 'session-override-match'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint, gpt4oEndpoint]);
+
+			// Override endpoint should be returned directly — token-bank API should NOT be called.
+			expect(result.model).toBe('claude-sonnet');
+			expect(mockCAPIClientService.makeRequest).not.toHaveBeenCalled();
+		});
+
+		it('should return the override endpoint when model ID uses spaces instead of dashes (normalized match)', async () => {
+			const claudeEndpoint = createEndpoint('claude-sonnet-4.6', 'Anthropic');
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			setOverrideModelId('claude sonnet 4.6');
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test normalized override',
+				sessionId: 'session-override-normalized'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint, gpt4oEndpoint]);
+
+			expect(result.model).toBe('claude-sonnet-4.6');
+			expect(mockCAPIClientService.makeRequest).not.toHaveBeenCalled();
+		});
+
+		it('should fall through to normal auto selection when override model ID does not match any known endpoint', async () => {
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			mockApiResponse(['gpt-4o']);
+			setOverrideModelId('unknown-model-xyz');
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test no-match override',
+				sessionId: 'session-override-no-match'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [gpt4oEndpoint]);
+
+			// Should fall through to normal auto selection (token-bank API called).
+			expect(result.model).toBe('gpt-4o');
+			expect(mockCAPIClientService.makeRequest).toHaveBeenCalled();
+			expect(mockLogService.warn).toHaveBeenCalledWith(
+				expect.stringContaining('unknown-model-xyz')
+			);
+		});
+
+		it('should use normal auto selection when override model ID is empty (default)', async () => {
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			mockApiResponse(['gpt-4o']);
+			// Do NOT set override — default is ''
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test empty override',
+				sessionId: 'session-override-empty'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [gpt4oEndpoint]);
+
+			// Normal auto selection — token-bank API should be called.
+			expect(result.model).toBe('gpt-4o');
+			expect(mockCAPIClientService.makeRequest).toHaveBeenCalled();
+		});
+
+		it('should attach reasoning effort to the resolved endpoint when override model and reasoning level are set', async () => {
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+			setOverrideModelId('claude-sonnet');
+			setOverrideReasoningLevel('high');
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test reasoning override',
+				sessionId: 'session-override-reasoning'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint]);
+
+			// Should return the override endpoint (or a wrapper with the reasoning effort).
+			expect(result.model).toBe('claude-sonnet');
+			// The resolved endpoint wrapper must carry the configured reasoning effort.
+			expect((result as AutoChatEndpoint).reasoningEffortOverride).toBe('high');
+			// Token-bank API should NOT be called.
+			expect(mockCAPIClientService.makeRequest).not.toHaveBeenCalled();
 		});
 	});
 });

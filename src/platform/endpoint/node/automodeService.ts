@@ -174,6 +174,34 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
+		// Task 2.1–2.5: Check for a model ID override before any token-bank or router logic.
+		const overrideModelId = this._configurationService.getConfig(ConfigKey.AutoModeOverrideModelId);
+		if (overrideModelId) {
+			const normalizeId = (s: string) => s.toLowerCase().replace(/[\s.]/g, '-');
+			const normalizedOverride = normalizeId(overrideModelId);
+			const overrideEndpoint = knownEndpoints.find(e =>
+				e.model === overrideModelId ||
+				normalizeId(e.model) === normalizedOverride ||
+				(e.name ? normalizeId(e.name) === normalizedOverride : false)
+			);
+			if (overrideEndpoint) {
+				// Task 2.5: Apply reasoning level if configured.
+				const reasoningLevel = this._configurationService.getConfig(ConfigKey.AutoModeOverrideReasoningLevel);
+				if (reasoningLevel !== 'none') {
+					const overrideConversationId = chatRequest?.sessionResource?.toString() ?? chatRequest?.sessionId ?? 'unknown';
+					const overrideEntry = this._autoModelCache.get(overrideConversationId);
+					const overrideTokenBank = this._acquireTokenBank(overrideEntry, chatRequest?.location, overrideConversationId);
+					const overrideToken = await overrideTokenBank.getToken();
+					const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, overrideEndpoint, overrideToken.session_token, 0, { low: 0, high: 0 }) as AutoChatEndpoint;
+					autoEndpoint.reasoningEffortOverride = reasoningLevel;
+					return autoEndpoint;
+				}
+				return overrideEndpoint;
+			}
+			// Task 2.4: Log a warning and fall through to normal auto mode selection.
+			this._logService.warn(`[AutomodeService] Auto mode model override '${overrideModelId}' not found in known endpoints; falling through to normal auto mode selection.`);
+		}
+
 		const conversationId = chatRequest?.sessionResource?.toString() ?? chatRequest?.sessionId ?? 'unknown';
 		const entry = this._autoModelCache.get(conversationId);
 		const tokenBank = this._acquireTokenBank(entry, chatRequest?.location, conversationId);

@@ -1001,6 +1001,11 @@ export namespace ConfigKey {
 	/** Model override for Explore (Code Research) agent — reads from core `chat.exploreAgent.defaultModel` */
 	export const ExploreAgentModel = defineSetting<string>('chat.exploreAgent.model', ConfigType.Simple, '');
 
+	/** Override model ID for auto mode. When set to a non-empty string, auto mode will use this model instead of dynamic selection. */
+	export const AutoModeOverrideModelId = defineSetting<string>('chat.autoModeOverride.modelId', ConfigType.Simple, '');
+	/** Override reasoning level for auto mode. Only takes effect when AutoModeOverrideModelId is set. */
+	export const AutoModeOverrideReasoningLevel = defineSetting<'none' | 'low' | 'medium' | 'high' | 'xhigh'>('chat.autoModeOverride.reasoningLevel', ConfigType.Simple, 'none');
+
 	export const CopilotMemoryEnabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
 	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, true);
 	export const ViewImageToolEnabled = defineSetting<boolean>('chat.tools.viewImage.enabled', ConfigType.ExperimentBased, true);
